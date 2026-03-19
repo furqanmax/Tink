@@ -191,6 +191,9 @@ exports.notifyOnMessageCreate = functions.firestore
           headers: {
             Urgency: 'high',
           },
+          fcmOptions: {
+            link: '/chat',
+          },
           notification: {
             title,
             body: 'New message',

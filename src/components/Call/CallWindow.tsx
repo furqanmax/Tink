@@ -39,7 +39,7 @@ export function CallWindow({ isOpen, onClose }: CallWindowProps) {
     if (!room || !localVideoRef.current) return;
 
     const localParticipant = room.localParticipant;
-    const videoTrack = localParticipant.videoTrackPublications[0]?.track;
+    const videoTrack = Array.from(localParticipant.videoTracks.values())[0]?.track;
     
     if (videoTrack && localVideoRef.current) {
       const mediaStream = new MediaStream([videoTrack.mediaStreamTrack]);
@@ -52,7 +52,7 @@ export function CallWindow({ isOpen, onClose }: CallWindowProps) {
     if (remoteParticipants.length === 0 || !remoteVideoRef.current) return;
 
     const remoteParticipant = remoteParticipants[0];
-    const videoTrack = remoteParticipant.videoTrackPublications[0]?.track;
+    const videoTrack = Array.from(remoteParticipant.videoTracks.values())[0]?.track;
     
     if (videoTrack && remoteVideoRef.current) {
       const mediaStream = new MediaStream([videoTrack.mediaStreamTrack]);

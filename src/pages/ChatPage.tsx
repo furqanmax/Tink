@@ -80,44 +80,50 @@ export function ChatPage() {
         isOpen={showAdminPanel} 
         onClose={() => setShowAdminPanel(false)} 
       />
-      <Navbar 
-        user={user} 
-        userProfile={userProfile} 
-        onLogout={handleLogout}
-      >
-        {/* Additional Navbar Actions */}
-        <div className="flex items-center gap-2 mr-4">
-          {/* Friend Requests Button */}
-          <button
-            onClick={() => setShowFriendRequests(true)}
-            className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-            title="Friend Requests"
-          >
-            <UserPlus className="w-5 h-5" />
-            {incomingRequests.length > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                {incomingRequests.length}
-              </span>
-            )}
-          </button>
-
-          {/* Admin Button (only for admins) */}
-          {userProfile?.role === 'admin' && (
+      <div className={selectedContact ? 'hidden lg:block' : 'block'}>
+        <Navbar 
+          user={user} 
+          userProfile={userProfile} 
+          onLogout={handleLogout}
+        >
+          {/* Additional Navbar Actions */}
+          <div className="flex items-center gap-2 mr-4">
+            {/* Friend Requests Button */}
             <button
-              onClick={() => setShowAdminPanel(true)}
-              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Admin Dashboard"
+              onClick={() => setShowFriendRequests(true)}
+              className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Friend Requests"
             >
-              <Shield className="w-5 h-5" />
+              <UserPlus className="w-5 h-5" />
+              {incomingRequests.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                  {incomingRequests.length}
+                </span>
+              )}
             </button>
-          )}
-        </div>
-      </Navbar>
+
+            {/* Admin Button (only for admins) */}
+            {userProfile?.role === 'admin' && (
+              <button
+                onClick={() => setShowAdminPanel(true)}
+                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Admin Dashboard"
+              >
+                <Shield className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        </Navbar>
+      </div>
       
       <Layout>
-        <div className="flex h-[calc(100vh-4rem)]">
+        <div className="flex h-[100vh] overflow-hidden">
           {/* Sidebar */}
-          <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+          <div
+            className={`w-full lg:w-80 bg-white border-r border-gray-200 flex-col min-w-0 ${
+              selectedContact ? 'hidden lg:flex' : 'flex'
+            }`}
+          >
             {/* Tabs */}
             <div className="flex border-b border-gray-200">
               <button
@@ -169,7 +175,11 @@ export function ChatPage() {
           </div>
 
           {/* Main Chat Area */}
-          <div className="flex-1 bg-gray-50">
+          <div
+            className={`flex-1 bg-gray-50 min-w-0 ${
+              selectedContact ? 'flex' : 'hidden lg:flex'
+            }`}
+          >
             {selectedContact ? (
               <ChatWindow 
                 contactId={selectedContact} 
@@ -177,7 +187,7 @@ export function ChatPage() {
                 onStartCall={() => setShowCallWindow(true)}
               />
             ) : (
-              <div className="h-full flex items-center justify-center">
+              <div className="h-full flex items-center justify-center w-full">
                 <div className="text-center">
                   <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <svg
@@ -195,10 +205,10 @@ export function ChatPage() {
                     </svg>
                   </div>
                   <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                    Welcome to Video Chat
+                    Welcome to Tink
                   </h2>
                   <p className="text-gray-500 max-w-sm mb-6">
-                    Select a contact from the sidebar or search for users to start chatting
+                    Select a contact from the sidebar or search for users to start a chat
                   </p>
                   
                   {incomingRequests.length > 0 && (

@@ -1,6 +1,6 @@
-# PWA Video Chat Application
+# Tink
 
-A secure, real-time video chat Progressive Web App built with React, TypeScript, Firebase, and LiveKit.
+Tink is a secure, real-time messaging and calls Progressive Web App built with React, TypeScript, Firebase, and LiveKit.
 
 ## Features
 
@@ -36,7 +36,7 @@ A secure, real-time video chat Progressive Web App built with React, TypeScript,
 ### 1. Clone and Install
 
 ```bash
-cd video-chat-app
+cd Tink
 npm install
 ```
 
@@ -92,7 +92,7 @@ Visit `http://localhost:5173`
 ## Project Structure
 
 ```
-video-chat-app/
+Tink/
 ├── public/              # Static assets, PWA manifest, Service Worker
 ├── src/
 │   ├── components/      # React components

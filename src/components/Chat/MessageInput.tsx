@@ -26,7 +26,10 @@ export function MessageInput({ onSendMessage }: MessageInputProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="p-4 bg-white border-t border-gray-200">
+    <form
+      onSubmit={handleSubmit}
+      className="p-3 sm:p-4 bg-white border-t border-gray-200 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"
+    >
       <div className="flex items-end gap-2">
         <button
           type="button"
@@ -45,8 +48,8 @@ export function MessageInput({ onSendMessage }: MessageInputProps) {
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
             rows={1}
-            className="w-full px-4 py-3 bg-gray-100 border-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none max-h-32"
-            style={{ minHeight: '44px' }}
+            className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-100 border-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none max-h-32 text-sm sm:text-base"
+            style={{ minHeight: '40px' }}
           />
         </div>
 

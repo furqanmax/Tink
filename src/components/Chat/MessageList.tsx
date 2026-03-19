@@ -34,7 +34,7 @@ export function MessageList({ messages, currentUserId }: MessageListProps) {
   }
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="px-3 sm:px-4 py-4 space-y-4">
       {messages.map((message, index) => {
         const isOwn = message.senderId === currentUserId;
         const showAvatar = !isOwn && (
@@ -44,9 +44,9 @@ export function MessageList({ messages, currentUserId }: MessageListProps) {
         return (
           <div
             key={message.messageId}
-            className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+            className={`flex w-full ${isOwn ? 'justify-end' : 'justify-start'}`}
           >
-            <div className={`flex max-w-[70%] ${isOwn ? 'flex-row-reverse' : 'flex-row'} gap-2`}>
+            <div className={`flex max-w-[85%] sm:max-w-[70%] ${isOwn ? 'flex-row-reverse' : 'flex-row'} gap-2`}>
               {/* Avatar (only show for first message in sequence from other user) */}
               {!isOwn && (
                 <div className={`w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 ${

@@ -1,6 +1,5 @@
-import { messaging, auth, firestore } from '@/config/firebase';
+import { auth, firestore, getMessagingIfSupported, requestFCMToken } from '@/config/firebase';
 import { onMessage } from 'firebase/messaging';
-import { requestFCMToken } from '@/config/firebase';
 import { useCallStore } from '@/store/callStore';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -45,19 +44,21 @@ class NotificationService {
         return;
       }
 
-      // Get FCM token
-      const token = await requestFCMToken();
-      if (token && auth.currentUser) {
-        await updateDoc(doc(firestore, 'users', auth.currentUser.uid), {
-          fcmToken: token,
-          fcmUpdatedAt: serverTimestamp(),
+      const messaging = await getMessagingIfSupported();
+      if (messaging) {
+        const token = await requestFCMToken();
+        if (token && auth.currentUser) {
+          await updateDoc(doc(firestore, 'users', auth.currentUser.uid), {
+            fcmToken: token,
+            fcmUpdatedAt: serverTimestamp(),
+          });
+        }
+
+        // Handle foreground messages
+        onMessage(messaging, (payload) => {
+          this.handleForegroundMessage(payload);
         });
       }
-
-      // Handle foreground messages
-      onMessage(messaging, (payload) => {
-        this.handleForegroundMessage(payload);
-      });
 
       this.initialized = true;
     } catch (error) {
@@ -102,10 +103,10 @@ class NotificationService {
       return;
     }
 
-    const options: NotificationOptions = {
+    const options: NotificationOptions & { actions?: Array<{ action: string; title: string }> } = {
       body: notification.body,
-      icon: notification.icon || '/icon-192x192.png',
-      badge: notification.badge || '/icon-72x72.png',
+      icon: notification.icon || '/icon.svg',
+      badge: notification.badge || '/icon.svg',
       tag: notification.tag || notification.type,
       data: notification.data,
       requireInteraction: notification.type === 'call',

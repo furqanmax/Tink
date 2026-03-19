@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, getDocs, doc, updateDoc, deleteDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, getDocs, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { firestore } from '@/config/firebase';
 import { useAuthStore } from '@/store/authStore';
 import { User, AdminSettings } from '@/types';

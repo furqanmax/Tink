@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
-import { getMessaging, getToken } from 'firebase/messaging';
+import { getMessaging, getToken, isSupported, Messaging } from 'firebase/messaging';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
 const firebaseConfig = {
@@ -17,7 +17,7 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const firestore = getFirestore(app);
-export const messaging = getMessaging(app);
+let messaging: Messaging | null = null;
 export const functions = getFunctions(app, 'us-central1');
 
 // Enable persistence
@@ -35,8 +35,27 @@ if (import.meta.env.DEV && import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true'
 }
 
 // Request FCM token for notifications
+export async function getMessagingIfSupported(): Promise<Messaging | null> {
+  if (messaging) return messaging;
+  try {
+    const supported = await isSupported();
+    if (!supported) return null;
+    messaging = getMessaging(app);
+    return messaging;
+  } catch (error) {
+    console.warn('Firebase messaging not supported:', error);
+    return null;
+  }
+}
+
 export async function requestFCMToken(): Promise<string | null> {
   try {
+    const messagingInstance = await getMessagingIfSupported();
+    if (!messagingInstance) {
+      console.warn('FCM not supported in this browser');
+      return null;
+    }
+
     const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY;
     if (!vapidKey) {
       console.warn('FCM VAPID key not configured');
@@ -48,7 +67,7 @@ export async function requestFCMToken(): Promise<string | null> {
       serviceWorkerRegistration = await navigator.serviceWorker.register('/sw.js');
     }
     
-    const token = await getToken(messaging, {
+    const token = await getToken(messagingInstance, {
       vapidKey,
       serviceWorkerRegistration,
     });

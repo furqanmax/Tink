@@ -306,6 +306,3 @@ export const useCallStore = create<CallStore>((set, get) => ({
 
   clearError: () => set({ error: null }),
 }));
-
-// Import auth for use in store
-import { auth } from '@/config/firebase';

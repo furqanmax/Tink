@@ -9,6 +9,7 @@ export interface User {
   isVerified: boolean;
   blockedUsers: string[];
   friends: string[];
+  role?: 'admin' | 'user' | string;
   publicKey?: string;
   secretKey?: string;
   settings: {
@@ -78,4 +79,5 @@ export interface AdminSettings {
   videoCodec: string;
   enableRecording: boolean;
   turnServers: string[];
+  blockedUsers?: string[];
 }

@@ -259,6 +259,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messageId,
         conversationId,
         senderId: currentUser.uid,
+        senderName: currentUser.displayName || currentUser.email || 'You',
         recipientId,
         content,
         contentEncrypted: encrypted.ciphertext,

@@ -342,7 +342,7 @@ class FileTransferService {
         resolve();
       };
 
-      dataChannel.onerror = (error) => {
+      dataChannel.onerror = () => {
         clearTimeout(timeout);
         reject(new Error('Data channel failed to open'));
       };

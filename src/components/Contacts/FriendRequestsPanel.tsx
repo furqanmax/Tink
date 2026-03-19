@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useFriendRequestStore } from '@/store/friendRequestStore';
 import { useAuthStore } from '@/store/authStore';
-import { UserPlus, Check, X, Clock, UserCheck } from 'lucide-react';
+import { UserPlus, Check, X, Clock } from 'lucide-react';
 
 interface FriendRequestsPanelProps {
   isOpen: boolean;

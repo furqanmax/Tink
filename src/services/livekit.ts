@@ -41,9 +41,7 @@ export class LiveKitService {
     try {
       const token = await this.getAccessToken(roomName, userName);
 
-      const room = new Room({
-        autoSubscribe: options?.autoSubscribe !== false,
-      });
+      const room = new Room();
 
       await room.connect(LIVEKIT_URL, token, {
         autoSubscribe: options?.autoSubscribe !== false,
@@ -89,7 +87,11 @@ export class LiveKitService {
 
     const audioTrack = this.getLocalAudioTrack();
     if (audioTrack) {
-      await audioTrack.setMuted(!enabled);
+      if (enabled) {
+        await audioTrack.unmute();
+      } else {
+        await audioTrack.mute();
+      }
     }
   }
 
@@ -101,7 +103,11 @@ export class LiveKitService {
 
     const videoTrack = this.getLocalVideoTrack();
     if (videoTrack) {
-      await videoTrack.setMuted(!enabled);
+      if (enabled) {
+        await videoTrack.unmute();
+      } else {
+        await videoTrack.mute();
+      }
     }
   }
 
@@ -110,7 +116,7 @@ export class LiveKitService {
    */
   getLocalVideoTrack() {
     if (!this.localParticipant) return null;
-    const publication = Array.from(this.localParticipant.videoTrackPublications.values())[0];
+    const publication = Array.from(this.localParticipant.videoTracks.values())[0];
     return (publication?.track as LocalVideoTrack) || null;
   }
 
@@ -119,7 +125,7 @@ export class LiveKitService {
    */
   getLocalAudioTrack() {
     if (!this.localParticipant) return null;
-    const publication = Array.from(this.localParticipant.audioTrackPublications.values())[0];
+    const publication = Array.from(this.localParticipant.audioTracks.values())[0];
     return (publication?.track as LocalAudioTrack) || null;
   }
 
@@ -136,13 +142,10 @@ export class LiveKitService {
   async getRoomStats() {
     if (!this.room) return null;
 
-    const stats = await this.room.engine?.getStats();
-    
     return {
       roomName: this.room.name,
       participantCount: this.room.participants.size,
       isConnected: this.room.state === 'connected',
-      stats
     };
   }
 
@@ -195,7 +198,7 @@ export class LiveKitService {
     }
 
     try {
-      await audioTrack.setProcessor(this.audioProcessor);
+      await audioTrack.setProcessor(this.audioProcessor as any);
     } catch (error) {
       console.warn('Failed to enable audio processing:', error);
     }

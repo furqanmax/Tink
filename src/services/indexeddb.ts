@@ -54,7 +54,7 @@ interface VideoChatDB extends DBSchema {
 
 class IndexedDBService {
   private db: IDBPDatabase<VideoChatDB> | null = null;
-  private readonly DB_NAME = 'video-chat-db';
+  private readonly DB_NAME = 'tink-db';
   private readonly DB_VERSION = 1;
 
   async initialize(): Promise<void> {

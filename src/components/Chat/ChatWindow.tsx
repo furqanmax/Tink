@@ -136,7 +136,7 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
   }
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-white w-full">
       {/* File Picker Modal */}
       {showFilePicker && (
         <FilePicker
@@ -146,7 +146,7 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
+      <div className="flex items-center justify-between px-3 sm:px-4 py-3 border-b border-gray-200 bg-white">
         <div className="flex items-center gap-3">
           <button
             onClick={onClose}
@@ -156,7 +156,7 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
           </button>
           
           <div className="relative">
-            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 bg-blue-100 rounded-full flex items-center justify-center">
               {contact.photoURL ? (
                 <img
                   src={contact.photoURL}
@@ -180,11 +180,11 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
             />
           </div>
           
-          <div>
-            <h2 className="font-semibold text-gray-900">
+          <div className="min-w-0">
+            <h2 className="font-semibold text-gray-900 truncate">
               {contact.displayName || 'Unknown User'}
             </h2>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 truncate">
               {contact.status === 'online' 
                 ? 'Online' 
                 : contact.status === 'busy'
@@ -194,7 +194,7 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           <button 
             onClick={handleAudioCall}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -211,7 +211,7 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
           </button>
           <button 
             onClick={() => setShowFilePicker(true)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="hidden sm:inline-flex p-2 hover:bg-gray-100 rounded-lg transition-colors"
             title="Send file"
           >
             <Paperclip className="w-5 h-5 text-gray-600" />
@@ -229,7 +229,9 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
       </div>
 
       {/* Input */}
-      <MessageInput onSendMessage={handleSendMessage} />
+      <div className="bg-white">
+        <MessageInput onSendMessage={handleSendMessage} />
+      </div>
     </div>
   );
 }

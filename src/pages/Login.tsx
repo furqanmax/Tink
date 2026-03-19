@@ -107,7 +107,7 @@ export function Login() {
         </div>
 
         <p className="text-center text-gray-500 text-sm mt-8">
-          Secure video chat with end-to-end encryption
+          Secure messaging and calls with end-to-end encryption
         </p>
       </div>
     </div>

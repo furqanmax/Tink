@@ -194,8 +194,8 @@ exports.notifyOnMessageCreate = functions.firestore
           notification: {
             title,
             body: 'New message',
-            icon: '/icon-192x192.png',
-            badge: '/icon-72x72.png',
+            icon: '/icon.svg',
+            badge: '/icon.svg',
             tag: 'message',
           },
         },

@@ -16,87 +16,65 @@ interface ContactWithConversation extends User {
 }
 
 export function ContactsList({ onSelectContact, selectedContact }: ContactsListProps) {
-  const { user, userProfile } = useAuthStore();
+  const { user } = useAuthStore();
   const [contacts, setContacts] = useState<ContactWithConversation[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
 
-    // Subscribe to user's friends list changes
-    const userRef = doc(firestore, 'users', user.uid);
-    
-    const unsubscribe = onSnapshot(userRef, async (snapshot) => {
-      if (!snapshot.exists()) {
+    setLoading(true);
+
+    const q = query(
+      collection(firestore, 'conversations'),
+      where('participants', 'array-contains', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      if (snapshot.empty) {
         setContacts([]);
         setLoading(false);
         return;
       }
 
-      const userData = snapshot.data() as User;
-      const friendIds = userData.friends || [];
+      const conversations = snapshot.docs.map((docSnap) => ({
+        ...docSnap.data(),
+        conversationId: docSnap.id,
+      })) as Conversation[];
 
-      if (friendIds.length === 0) {
-        setContacts([]);
-        setLoading(false);
-        return;
-      }
+      const contactPromises = conversations.map(async (conversation) => {
+        const participants = conversation.participants || [];
+        const otherUserId = participants.find((id) => id !== user.uid);
+        if (!otherUserId) return null;
 
-      // Fetch friend details
-      const friendsData: ContactWithConversation[] = [];
-      
-      for (const friendId of friendIds) {
-        const friendDoc = await getDoc(doc(firestore, 'users', friendId));
-        if (friendDoc.exists()) {
-          friendsData.push({
-            ...friendDoc.data(),
-            uid: friendId,
-          } as ContactWithConversation);
-        }
-      }
+        const userDoc = await getDoc(doc(firestore, 'users', otherUserId));
+        if (!userDoc.exists()) return null;
 
-      setContacts(friendsData);
+        return {
+          ...userDoc.data(),
+          uid: otherUserId,
+          conversation,
+        } as ContactWithConversation;
+      });
+
+      const results = await Promise.all(contactPromises);
+      const filtered = results.filter(Boolean) as ContactWithConversation[];
+
+      filtered.sort((a, b) => {
+        const aTime = a.conversation?.lastMessageTime || 0;
+        const bTime = b.conversation?.lastMessageTime || 0;
+        return bTime - aTime;
+      });
+
+      setContacts(filtered);
+      setLoading(false);
+    }, (error) => {
+      console.error('Failed to load conversations:', error);
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, [user]);
-
-  // Subscribe to conversations for last message
-  useEffect(() => {
-    if (!user || contacts.length === 0) return;
-
-    const unsubscribers: (() => void)[] = [];
-
-    contacts.forEach((contact) => {
-      const conversationId = [user.uid, contact.uid].sort().join('_');
-      const convRef = doc(firestore, 'conversations', conversationId);
-      
-      const unsubscribe = onSnapshot(convRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const conversation = { ...snapshot.data(), conversationId } as Conversation;
-          setContacts((prev) => {
-            const updated = prev.map((c) =>
-              c.uid === contact.uid ? { ...c, conversation } : c
-            );
-
-            // Keep most recent chats on top
-            return updated.sort((a, b) => {
-              const aTime = a.conversation?.lastMessageTime || 0;
-              const bTime = b.conversation?.lastMessageTime || 0;
-              return bTime - aTime;
-            });
-          });
-        }
-      });
-
-      unsubscribers.push(unsubscribe);
-    });
-
-    return () => {
-      unsubscribers.forEach(unsub => unsub());
-    };
-  }, [user, contacts]);
 
   if (loading) {
     return (

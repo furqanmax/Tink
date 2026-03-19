@@ -42,8 +42,16 @@ export async function requestFCMToken(): Promise<string | null> {
       console.warn('FCM VAPID key not configured');
       return null;
     }
+
+    let serviceWorkerRegistration: ServiceWorkerRegistration | undefined;
+    if ('serviceWorker' in navigator) {
+      serviceWorkerRegistration = await navigator.serviceWorker.register('/sw.js');
+    }
     
-    const token = await getToken(messaging, { vapidKey });
+    const token = await getToken(messaging, {
+      vapidKey,
+      serviceWorkerRegistration,
+    });
     
     if (token) {
       console.log('FCM Token:', token);

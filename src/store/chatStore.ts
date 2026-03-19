@@ -92,8 +92,8 @@ interface ChatState {
   error: string | null;
   unsubscribers: Unsubscribe[];
   
-  loadConversationHistory: (conversationId: string) => Promise<void>;
-  subscribeToMessages: (conversationId: string) => Unsubscribe;
+  loadConversationHistory: (conversationId: string, currentUserId: string) => Promise<void>;
+  subscribeToMessages: (conversationId: string, currentUserId: string) => Unsubscribe;
   sendMessage: (conversationId: string, content: string) => Promise<void>;
   setActiveConversation: (conversationId: string | null) => void;
   markAsRead: (conversationId: string) => Promise<void>;
@@ -134,9 +134,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   error: null,
   unsubscribers: [],
 
-  loadConversationHistory: async (conversationId: string) => {
-    const currentUser = auth.currentUser;
-    if (!currentUser) return;
+  loadConversationHistory: async (conversationId: string, currentUserId: string) => {
+    if (!currentUserId) return;
 
     set({ loading: true });
     try {
@@ -162,7 +161,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const messages = await Promise.all(
         snapshot.docs
           .map((docSnap) => ({ ...docSnap.data(), messageId: docSnap.id }))
-          .map((data) => decryptIfNeeded(data, data.messageId, currentUser.uid, conversationId))
+          .map((data) => decryptIfNeeded(data, data.messageId, currentUserId, conversationId))
       );
 
       set((state) => ({
@@ -187,21 +186,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  subscribeToMessages: (conversationId: string) => {
-    const currentUser = auth.currentUser;
-    if (!currentUser) return () => {};
+  subscribeToMessages: (conversationId: string, currentUserId: string) => {
+    if (!currentUserId) return () => {};
 
     const q = query(
       collection(firestore, 'messages'),
-      where('conversationId', '==', conversationId),
-      orderBy('timestamp', 'asc')
+      where('conversationId', '==', conversationId)
     );
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       const messages = await Promise.all(
         snapshot.docs
           .map((docSnap) => ({ ...docSnap.data(), messageId: docSnap.id }))
-          .map((data) => decryptIfNeeded(data, data.messageId, currentUser.uid, conversationId))
+          .map((data) => decryptIfNeeded(data, data.messageId, currentUserId, conversationId))
       );
       
       set((state) => ({

@@ -1,7 +1,8 @@
-import { messaging } from '@/config/firebase';
+import { messaging, auth, firestore } from '@/config/firebase';
 import { onMessage } from 'firebase/messaging';
 import { requestFCMToken } from '@/config/firebase';
 import { useCallStore } from '@/store/callStore';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 export type NotificationType = 'call' | 'message' | 'request' | 'system';
 
@@ -45,7 +46,13 @@ class NotificationService {
       }
 
       // Get FCM token
-      await requestFCMToken();
+      const token = await requestFCMToken();
+      if (token && auth.currentUser) {
+        await updateDoc(doc(firestore, 'users', auth.currentUser.uid), {
+          fcmToken: token,
+          fcmUpdatedAt: serverTimestamp(),
+        });
+      }
 
       // Handle foreground messages
       onMessage(messaging, (payload) => {

@@ -151,6 +151,64 @@ exports.sendNotification = functions.https.onCall(async (data, context) => {
 });
 
 /**
+ * Send push notification when a new message is created
+ */
+exports.notifyOnMessageCreate = functions.firestore
+  .document('messages/{messageId}')
+  .onCreate(async (snap) => {
+    const message = snap.data();
+    const recipientId = message?.recipientId;
+    const senderId = message?.senderId;
+
+    if (!recipientId || !senderId) {
+      return null;
+    }
+
+    try {
+      const userDoc = await admin.firestore().doc(`users/${recipientId}`).get();
+      const fcmToken = userDoc.data()?.fcmToken;
+      if (!fcmToken) {
+        return null;
+      }
+
+      const title = message?.senderName
+        ? `Message from ${message.senderName}`
+        : 'New message';
+
+      const payload = {
+        token: fcmToken,
+        notification: {
+          title,
+          body: 'New message',
+        },
+        data: {
+          type: 'message',
+          senderId,
+          recipientId,
+          conversationId: message?.conversationId || '',
+        },
+        webpush: {
+          headers: {
+            Urgency: 'high',
+          },
+          notification: {
+            title,
+            body: 'New message',
+            icon: '/icon-192x192.png',
+            badge: '/icon-72x72.png',
+            tag: 'message',
+          },
+        },
+      };
+
+      return admin.messaging().send(payload);
+    } catch (error) {
+      console.error('Failed to send message notification:', error);
+      return null;
+    }
+  });
+
+/**
  * Create admin user (one-time setup function)
  */
 exports.createAdminUser = functions.https.onCall(async (data, context) => {

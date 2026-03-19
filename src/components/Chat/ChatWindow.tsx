@@ -50,8 +50,8 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
   useEffect(() => {
     if (!user || !conversationId) return;
 
-    loadConversationHistory(conversationId);
-    const unsubscribe = subscribeToMessages(conversationId);
+    loadConversationHistory(conversationId, user.uid);
+    const unsubscribe = subscribeToMessages(conversationId, user.uid);
 
     // Ensure conversation document exists
     const ensureConversation = async () => {

@@ -31,7 +31,7 @@ export function Login() {
               <LogIn className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900">Welcome Back</h1>
-            <p className="text-gray-500 mt-2">Sign in to continue to Video Chat</p>
+            <p className="text-gray-500 mt-2">Sign in to continue to Tink</p>
           </div>
 
           {error && (

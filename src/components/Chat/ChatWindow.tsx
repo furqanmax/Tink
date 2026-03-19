@@ -136,7 +136,7 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
   }
 
   return (
-    <div className="h-full flex flex-col bg-white w-full">
+    <div className="h-full min-h-0 flex flex-col bg-white w-full">
       {/* File Picker Modal */}
       {showFilePicker && (
         <FilePicker
@@ -223,13 +223,13 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto bg-gray-50">
+      <div className="flex-1 min-h-0 overflow-y-auto bg-gray-50 overscroll-contain">
         <MessageList messages={messages} currentUserId={user?.uid || ''} />
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}
-      <div className="bg-white">
+      <div className="bg-white sticky bottom-0 left-0 right-0">
         <MessageInput onSendMessage={handleSendMessage} />
       </div>
     </div>

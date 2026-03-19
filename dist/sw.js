@@ -1,5 +1,5 @@
 const CACHE_VERSION = 'v1';
-const CACHE_NAME = `video-chat-${CACHE_VERSION}`;
+const CACHE_NAME = `tink-${CACHE_VERSION}`;
 
 // Assets to cache immediately on install
 const STATIC_ASSETS = [

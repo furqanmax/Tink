@@ -3,7 +3,6 @@ import { useAuthStore } from '@/store/authStore';
 import { useCallStore } from '@/store/callStore';
 import { useFriendRequestStore } from '@/store/friendRequestStore';
 import { Navbar } from '@/components/Common/Navbar';
-import { Layout } from '@/components/Common/Layout';
 import { UserSearch } from '@/components/Contacts/UserSearch';
 import { ContactsList } from '@/components/Contacts/ContactsList';
 import { ChatWindow } from '@/components/Chat/ChatWindow';
@@ -59,7 +58,10 @@ export function ChatPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div
+      className="bg-gray-100 flex flex-col overflow-hidden"
+      style={{ height: 'var(--app-height, 100dvh)' }}
+    >
       {/* Incoming Call Notification */}
       <IncomingCallNotification isOpen={true} />
 
@@ -115,9 +117,9 @@ export function ChatPage() {
           </div>
         </Navbar>
       </div>
-      
-      <Layout>
-        <div className="flex h-[100vh] overflow-hidden">
+
+      <div className="flex-1 min-h-0">
+        <div className="flex overflow-hidden h-full">
           {/* Sidebar */}
           <div
             className={`w-full lg:w-80 bg-white border-r border-gray-200 flex-col min-w-0 ${
@@ -225,7 +227,7 @@ export function ChatPage() {
             )}
           </div>
         </div>
-      </Layout>
+      </div>
     </div>
   );
 }

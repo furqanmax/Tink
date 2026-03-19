@@ -1,3 +1,4 @@
 node_modules
 .env
 nova-app-d207e-firebase-adminsdk-fbsvc-78ea98f56f.json
+dist

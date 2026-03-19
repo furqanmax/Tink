@@ -33,7 +33,7 @@ export function Navbar({ user, userProfile, onLogout, children }: NavbarProps) {
             </svg>
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Video Chat</h1>
+            <h1 className="text-xl font-bold text-gray-900">Tink</h1>
             <p className="text-xs text-gray-500">Secure PWA Messaging</p>
           </div>
         </div>

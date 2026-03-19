@@ -1,7 +1,7 @@
 {
-  "name": "Video Chat PWA",
-  "short_name": "VideoChat",
-  "description": "Secure PWA for real-time video chat, messaging, and file sharing",
+  "name": "Tink",
+  "short_name": "Tink",
+  "description": "Secure messaging and calls with end-to-end encryption",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

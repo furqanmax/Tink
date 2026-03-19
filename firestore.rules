@@ -1,0 +1,95 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Users collection - readable by friends, writable by self
+    match /users/{userId} {
+      allow read: if isSignedIn() && (isOwner(userId) || isFriend(userId));
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+      allow delete: if isSignedIn() && isOwner(userId);
+    }
+    
+    // Messages - readable by participants, writable by sender
+    match /messages/{messageId} {
+      allow read: if isSignedIn() && isMessageParticipant();
+      allow create: if isSignedIn() && isMessageSender();
+      allow update: if isSignedIn() && isMessageRecipient(); // For marking as read
+      allow delete: if false; // Messages are immutable
+    }
+    
+    // Conversations - readable/writable by participants
+    match /conversations/{conversationId} {
+      allow read: if isSignedIn() && isConversationParticipant();
+      allow create: if isSignedIn() && isConversationParticipant();
+      allow update: if isSignedIn() && isConversationParticipant();
+      allow delete: if isSignedIn() && isConversationParticipant();
+    }
+    
+    // Friend requests
+    match /friendRequests/{requestId} {
+      allow read: if isSignedIn() && isRequestParticipant();
+      allow create: if isSignedIn() && isRequestSender();
+      allow update: if isSignedIn() && isRequestRecipient(); // Only recipient can accept/deny
+      allow delete: if isSignedIn() && isRequestParticipant();
+    }
+    
+    // Admin settings - read by all, write by admin only
+    match /settings/{doc=**} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    function isFriend(userId) {
+      let currentUser = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return userId in (currentUser.friends || []);
+    }
+    
+    function isMessageParticipant() {
+      let msg = resource.data;
+      return request.auth.uid == msg.senderId || request.auth.uid == msg.recipientId;
+    }
+    
+    function isMessageSender() {
+      return request.auth.uid == request.resource.data.senderId;
+    }
+    
+    function isMessageRecipient() {
+      let msg = resource.data;
+      return request.auth.uid == msg.recipientId;
+    }
+    
+    function isConversationParticipant() {
+      let conv = resource.data;
+      return request.auth.uid in (conv.participants || []);
+    }
+    
+    function isRequestParticipant() {
+      let req = resource.data;
+      return request.auth.uid == req.senderId || request.auth.uid == req.recipientId;
+    }
+    
+    function isRequestSender() {
+      return request.auth.uid == request.resource.data.senderId;
+    }
+    
+    function isRequestRecipient() {
+      let req = resource.data;
+      return request.auth.uid == req.recipientId;
+    }
+  }
+}

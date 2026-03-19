@@ -1,0 +1,202 @@
+import { useEffect, useState } from 'react';
+import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { firestore } from '@/config/firebase';
+import { useAuthStore } from '@/store/authStore';
+import { User, Conversation } from '@/types';
+import { formatDistanceToNow } from '@/utils/formatters';
+
+interface ContactsListProps {
+  onSelectContact: (userId: string) => void;
+  selectedContact: string | null;
+}
+
+interface ContactWithConversation extends User {
+  conversation?: Conversation;
+  unreadCount?: number;
+}
+
+export function ContactsList({ onSelectContact, selectedContact }: ContactsListProps) {
+  const { user, userProfile } = useAuthStore();
+  const [contacts, setContacts] = useState<ContactWithConversation[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Subscribe to user's friends list changes
+    const userRef = doc(firestore, 'users', user.uid);
+    
+    const unsubscribe = onSnapshot(userRef, async (snapshot) => {
+      if (!snapshot.exists()) {
+        setContacts([]);
+        setLoading(false);
+        return;
+      }
+
+      const userData = snapshot.data() as User;
+      const friendIds = userData.friends || [];
+
+      if (friendIds.length === 0) {
+        setContacts([]);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch friend details
+      const friendsData: ContactWithConversation[] = [];
+      
+      for (const friendId of friendIds) {
+        const friendDoc = await getDoc(doc(firestore, 'users', friendId));
+        if (friendDoc.exists()) {
+          friendsData.push({
+            ...friendDoc.data(),
+            uid: friendId,
+          } as ContactWithConversation);
+        }
+      }
+
+      setContacts(friendsData);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Subscribe to conversations for last message
+  useEffect(() => {
+    if (!user || contacts.length === 0) return;
+
+    const unsubscribers: (() => void)[] = [];
+
+    contacts.forEach((contact) => {
+      const conversationId = [user.uid, contact.uid].sort().join('_');
+      const convRef = doc(firestore, 'conversations', conversationId);
+      
+      const unsubscribe = onSnapshot(convRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const conversation = { ...snapshot.data(), conversationId } as Conversation;
+          setContacts((prev) => {
+            const updated = prev.map((c) =>
+              c.uid === contact.uid ? { ...c, conversation } : c
+            );
+
+            // Keep most recent chats on top
+            return updated.sort((a, b) => {
+              const aTime = a.conversation?.lastMessageTime || 0;
+              const bTime = b.conversation?.lastMessageTime || 0;
+              return bTime - aTime;
+            });
+          });
+        }
+      });
+
+      unsubscribers.push(unsubscribe);
+    });
+
+    return () => {
+      unsubscribers.forEach(unsub => unsub());
+    };
+  }, [user, contacts]);
+
+  if (loading) {
+    return (
+      <div className="p-4 space-y-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center gap-3 p-3 rounded-lg animate-pulse">
+            <div className="w-12 h-12 bg-gray-200 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 bg-gray-200 rounded w-24" />
+              <div className="h-3 bg-gray-200 rounded w-32" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (contacts.length === 0) {
+    return (
+      <div className="p-8 text-center">
+        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg
+            className="w-8 h-8 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+            />
+          </svg>
+        </div>
+        <p className="text-gray-500 text-sm">
+          No contacts yet. Search for users to add friends.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="divide-y divide-gray-100">
+      {contacts.map((contact) => (
+        <button
+          key={contact.uid}
+          onClick={() => onSelectContact(contact.uid)}
+          className={`w-full flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors text-left ${
+            selectedContact === contact.uid ? 'bg-blue-50 hover:bg-blue-50' : ''
+          }`}
+        >
+          <div className="relative">
+            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+              {contact.photoURL ? (
+                <img
+                  src={contact.photoURL}
+                  alt={contact.displayName || ''}
+                  className="w-full h-full rounded-full object-cover"
+                />
+              ) : (
+                <span className="text-blue-600 font-medium">
+                  {(contact.displayName || contact.email || '?')[0].toUpperCase()}
+                </span>
+              )}
+            </div>
+            <span
+              className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
+                contact.status === 'online'
+                  ? 'bg-green-500'
+                  : contact.status === 'busy'
+                  ? 'bg-yellow-500'
+                  : 'bg-gray-400'
+              }`}
+            />
+          </div>
+          
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between">
+              <p className="font-medium text-gray-900 truncate">
+                {contact.displayName || 'Unknown User'}
+              </p>
+              {contact.conversation?.lastMessageTime && (
+                <span className="text-xs text-gray-400">
+                  {formatDistanceToNow(contact.conversation.lastMessageTime)}
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-gray-500 truncate">
+              {contact.conversation?.lastMessage || contact.email || 'No messages yet'}
+            </p>
+          </div>
+
+          {contact.unreadCount && contact.unreadCount > 0 && (
+            <span className="w-5 h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center flex-shrink-0">
+              {contact.unreadCount}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}

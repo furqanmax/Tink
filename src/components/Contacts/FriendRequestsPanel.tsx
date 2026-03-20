@@ -25,7 +25,7 @@ export function FriendRequestsPanel({ isOpen, onClose }: FriendRequestsPanelProp
 
   useEffect(() => {
     if (isOpen && user) {
-      loadFriendRequests();
+      loadFriendRequests(user.uid);
     }
   }, [isOpen, user, loadFriendRequests]);
 

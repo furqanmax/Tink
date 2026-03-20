@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, deleteDoc, getDocs, serverTimestamp, writeBatch, arrayUnion, arrayRemove, setDoc, getDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, deleteDoc, getDocs, serverTimestamp, writeBatch, arrayUnion, arrayRemove, setDoc, getDoc } from 'firebase/firestore';
 import { firestore, auth } from '@/config/firebase';
 import { FriendRequest, User } from '@/types';
 import { notificationService } from '@/services/notification';
@@ -18,7 +18,7 @@ interface FriendRequestState {
   cancelFriendRequest: (requestId: string) => Promise<void>;
   unfriendUser: (targetUserId: string) => Promise<void>;
   blockUser: (targetUserId: string) => Promise<void>;
-  loadFriendRequests: () => void;
+  loadFriendRequests: (userId?: string) => void;
   cleanup: () => void;
 }
 
@@ -43,6 +43,10 @@ function mapRequestDoc(id: string, data: any): FriendRequest {
     createdAt: toMillis(data.createdAt),
     updatedAt: toMillis(data.updatedAt),
   };
+}
+
+function sortRequestsByCreatedAtDesc(requests: FriendRequest[]): FriendRequest[] {
+  return [...requests].sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export const useFriendRequestStore = create<FriendRequestState>((set, get) => ({
@@ -376,9 +380,9 @@ export const useFriendRequestStore = create<FriendRequestState>((set, get) => ({
     }
   },
 
-  loadFriendRequests: () => {
-    const currentUser = auth.currentUser;
-    if (!currentUser) return;
+  loadFriendRequests: (userId?: string) => {
+    const currentUserId = userId ?? auth.currentUser?.uid;
+    if (!currentUserId) return;
 
     // Prevent duplicate live subscriptions when this action is called repeatedly.
     const { unsubscribers } = get();
@@ -387,31 +391,41 @@ export const useFriendRequestStore = create<FriendRequestState>((set, get) => ({
     // Subscribe to incoming requests
     const incomingQuery = query(
       collection(firestore, 'friendRequests'),
-      where('recipientId', '==', currentUser.uid),
-      where('status', '==', 'pending'),
-      orderBy('createdAt', 'desc')
+      where('recipientId', '==', currentUserId)
     );
 
     const unsubscribeIncoming = onSnapshot(incomingQuery, (snapshot) => {
-      const requests = snapshot.docs.map((requestDoc) => mapRequestDoc(requestDoc.id, requestDoc.data()));
-      set({ incomingRequests: requests });
+      const requests = snapshot.docs
+        .map((requestDoc) => mapRequestDoc(requestDoc.id, requestDoc.data()))
+        .filter((request) => request.status === 'pending');
+
+      set({
+        incomingRequests: sortRequestsByCreatedAtDesc(requests),
+        error: null,
+      });
     }, (error) => {
       console.error('Incoming requests subscription error:', error);
+      set({ error: (error as Error).message });
     });
 
     // Subscribe to outgoing requests
     const outgoingQuery = query(
       collection(firestore, 'friendRequests'),
-      where('senderId', '==', currentUser.uid),
-      where('status', 'in', ['pending', 'denied']),
-      orderBy('createdAt', 'desc')
+      where('senderId', '==', currentUserId)
     );
 
     const unsubscribeOutgoing = onSnapshot(outgoingQuery, (snapshot) => {
-      const requests = snapshot.docs.map((requestDoc) => mapRequestDoc(requestDoc.id, requestDoc.data()));
-      set({ outgoingRequests: requests });
+      const requests = snapshot.docs
+        .map((requestDoc) => mapRequestDoc(requestDoc.id, requestDoc.data()))
+        .filter((request) => request.status === 'pending' || request.status === 'denied');
+
+      set({
+        outgoingRequests: sortRequestsByCreatedAtDesc(requests),
+        error: null,
+      });
     }, (error) => {
       console.error('Outgoing requests subscription error:', error);
+      set({ error: (error as Error).message });
     });
 
     // Store unsubscribers
@@ -423,6 +437,6 @@ export const useFriendRequestStore = create<FriendRequestState>((set, get) => ({
     if (unsubscribers) {
       unsubscribers.forEach((unsub: any) => unsub());
     }
-    set({ incomingRequests: [], outgoingRequests: [] });
+    set({ incomingRequests: [], outgoingRequests: [], unsubscribers: [] });
   },
 }));

@@ -29,7 +29,7 @@ export function ChatPage() {
 
     // Load friend requests
     if (user) {
-      loadFriendRequests();
+      loadFriendRequests(user.uid);
     }
     return () => {
       cleanup();

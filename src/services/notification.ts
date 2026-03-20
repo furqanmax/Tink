@@ -76,10 +76,12 @@ class NotificationService {
     // Handle call notifications specially
     if (data.type === 'call') {
       const callStore = useCallStore.getState();
-      callStore.handleIncomingCall({
+      void callStore.handleIncomingCall({
         callId: data.callId,
         callerId: data.callerId,
         callerName: data.callerName,
+        roomName: data.roomName,
+        isVideo: data.isVideo !== '0',
       });
     }
 

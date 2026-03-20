@@ -16,7 +16,7 @@ import { UserPlus, Shield } from 'lucide-react';
 
 export function ChatPage() {
   const { user, userProfile, logout } = useAuthStore();
-  const { callState } = useCallStore();
+  const { callState, initializeIncomingCallListener, cleanup: cleanupCalls } = useCallStore();
   const { incomingRequests, loadFriendRequests, cleanup } = useFriendRequestStore();
   
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
@@ -45,9 +45,17 @@ export function ChatPage() {
     };
   }, [user, loadFriendRequests, cleanup]);
 
+  useEffect(() => {
+    if (!user) return;
+    initializeIncomingCallListener();
+    return () => {
+      cleanupCalls();
+    };
+  }, [user, initializeIncomingCallListener, cleanupCalls]);
+
   // Show call window when in call
   useEffect(() => {
-    if (callState === 'connected' || callState === 'connecting') {
+    if (callState === 'connected' || callState === 'connecting' || callState === 'ringing') {
       setShowCallWindow(true);
     }
   }, [callState]);

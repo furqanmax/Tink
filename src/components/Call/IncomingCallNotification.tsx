@@ -15,6 +15,45 @@ export function IncomingCallNotification({ isOpen }: IncomingCallNotificationPro
   } = useCallStore();
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const toneIntervalRef = useRef<number | null>(null);
+  const toneContextRef = useRef<AudioContext | null>(null);
+
+  const stopFallbackTone = () => {
+    if (toneIntervalRef.current) {
+      window.clearInterval(toneIntervalRef.current);
+      toneIntervalRef.current = null;
+    }
+    if (toneContextRef.current) {
+      void toneContextRef.current.close();
+      toneContextRef.current = null;
+    }
+  };
+
+  const startFallbackTone = () => {
+    if (toneIntervalRef.current) return;
+    const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+
+    const context = new AudioCtx();
+    toneContextRef.current = context;
+
+    const beep = () => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, context.currentTime);
+      gain.gain.setValueAtTime(0.0001, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.15, context.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.35);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.35);
+    };
+
+    beep();
+    toneIntervalRef.current = window.setInterval(beep, 1200);
+  };
 
   // Play ringtone when incoming call
   useEffect(() => {
@@ -27,7 +66,12 @@ export function IncomingCallNotification({ isOpen }: IncomingCallNotificationPro
       // Try to play (may be blocked by browser autoplay policy)
       audioRef.current.play().catch((error) => {
         console.log('Could not autoplay ringtone:', error);
+        startFallbackTone();
       });
+
+      audioRef.current.onerror = () => {
+        startFallbackTone();
+      };
 
       // Vibrate device if supported
       if ('vibrate' in navigator) {
@@ -41,6 +85,7 @@ export function IncomingCallNotification({ isOpen }: IncomingCallNotificationPro
         audioRef.current.currentTime = 0;
         audioRef.current = null;
       }
+      stopFallbackTone();
     };
   }, [isIncomingCall, isOpen]);
 
@@ -49,15 +94,17 @@ export function IncomingCallNotification({ isOpen }: IncomingCallNotificationPro
       audioRef.current.pause();
       audioRef.current = null;
     }
+    stopFallbackTone();
     await acceptIncomingCall();
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
     }
-    rejectIncomingCall();
+    stopFallbackTone();
+    await rejectIncomingCall();
   };
 
   if (!isOpen || !isIncomingCall || !incomingCallData) return null;
@@ -79,7 +126,9 @@ export function IncomingCallNotification({ isOpen }: IncomingCallNotificationPro
         <h2 className="text-2xl font-bold text-gray-900 mb-2">
           {incomingCallData.callerName}
         </h2>
-        <p className="text-gray-500 mb-8">Incoming video call...</p>
+        <p className="text-gray-500 mb-8">
+          Incoming {incomingCallData.isVideo ? 'video' : 'audio'} call...
+        </p>
 
         {/* Action Buttons */}
         <div className="flex items-center justify-center gap-6">

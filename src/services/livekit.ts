@@ -1,9 +1,19 @@
 import { Room, LocalParticipant, RemoteParticipant, RoomEvent, LocalAudioTrack, LocalVideoTrack } from 'livekit-client';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/config/firebase';
+import { auth } from '@/config/firebase';
 import { SimpleAudioProcessor } from '@/services/audioProcessing';
 
 const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL || 'ws://localhost:7880';
+
+function normalizeLiveKitUrl(rawUrl?: string): string {
+  const value = (rawUrl || '').trim();
+  if (!value) return 'ws://localhost:7880';
+  if (value.startsWith('ws://') || value.startsWith('wss://')) return value;
+  if (value.startsWith('http://')) return `ws://${value.slice('http://'.length)}`;
+  if (value.startsWith('https://')) return `wss://${value.slice('https://'.length)}`;
+  return `wss://${value}`;
+}
 
 export class LiveKitService {
   private room: Room | null = null;
@@ -12,18 +22,72 @@ export class LiveKitService {
   private eventHandlers: Map<string, Function[]> = new Map();
   private audioProcessor: SimpleAudioProcessor | null = null;
 
+  private getHttpTokenEndpoint(): string | null {
+    const explicitEndpoint = import.meta.env.VITE_LIVEKIT_TOKEN_HTTP_URL;
+    if (explicitEndpoint) return explicitEndpoint;
+
+    const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+    if (!projectId) return null;
+
+    const region = import.meta.env.VITE_FUNCTIONS_REGION || 'us-central1';
+    return `https://${region}-${projectId}.cloudfunctions.net/generateLiveKitTokenHttp`;
+  }
+
+  private async getAccessTokenViaHttp(roomName: string, userName: string): Promise<{ token: string; url?: string; roomName?: string }> {
+    const endpoint = this.getHttpTokenEndpoint();
+    if (!endpoint) {
+      throw new Error('LiveKit token HTTP endpoint is not configured');
+    }
+
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error('Not authenticated');
+    }
+
+    const idToken = await currentUser.getIdToken();
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({
+        roomName,
+        userName,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorPayload = await response.text();
+      throw new Error(`LiveKit token HTTP request failed (${response.status}): ${errorPayload}`);
+    }
+
+    const payload = await response.json();
+    if (!payload?.token) {
+      throw new Error('LiveKit token missing in HTTP response');
+    }
+    return {
+      token: payload.token as string,
+      url: payload.url as string | undefined,
+      roomName: payload.roomName as string | undefined,
+    };
+  }
+
   /**
    * Generate LiveKit access token via Cloud Function
    */
-  async getAccessToken(roomName: string, userName: string): Promise<string> {
-    const generateToken = httpsCallable(functions, 'generateLiveKitToken');
-    
-    const response = await generateToken({
-      roomName,
-      userName,
-    });
-
-    return (response.data as { token: string }).token;
+  async getAccessToken(roomName: string, userName: string): Promise<{ token: string; url?: string; roomName?: string }> {
+    try {
+      const generateToken = httpsCallable(functions, 'generateLiveKitToken');
+      const response = await generateToken({
+        roomName,
+        userName,
+      });
+      return response.data as { token: string; url?: string; roomName?: string };
+    } catch (error) {
+      console.warn('Callable LiveKit token failed, falling back to HTTP endpoint:', error);
+      return this.getAccessTokenViaHttp(roomName, userName);
+    }
   }
 
   /**
@@ -39,11 +103,16 @@ export class LiveKitService {
     }
   ): Promise<Room> {
     try {
-      const token = await this.getAccessToken(roomName, userName);
+      if (this.room) {
+        await this.disconnect();
+      }
+
+      const access = await this.getAccessToken(roomName, userName);
+      const connectUrl = normalizeLiveKitUrl(access.url || LIVEKIT_URL);
 
       const room = new Room();
 
-      await room.connect(LIVEKIT_URL, token, {
+      await room.connect(connectUrl, access.token, {
         autoSubscribe: options?.autoSubscribe !== false,
       });
 
@@ -56,7 +125,8 @@ export class LiveKitService {
       }
 
       this.room = room;
-
+      this.remoteParticipants.clear();
+      this.eventHandlers.clear();
       this.localParticipant = this.room.localParticipant;
       this.setupEventListeners();
 
@@ -76,6 +146,7 @@ export class LiveKitService {
       this.room = null;
       this.localParticipant = null;
       this.remoteParticipants.clear();
+      this.eventHandlers.clear();
     }
   }
 

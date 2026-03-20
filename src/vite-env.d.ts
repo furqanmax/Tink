@@ -10,6 +10,10 @@ interface ImportMetaEnv {
   readonly VITE_FCM_VAPID_KEY?: string;
   readonly VITE_USE_FIREBASE_EMULATOR?: string;
   readonly VITE_LIVEKIT_URL?: string;
+  readonly VITE_CALL_PROVIDER?: string;
+  readonly VITE_JITSI_DOMAIN?: string;
+  readonly VITE_FUNCTIONS_REGION?: string;
+  readonly VITE_LIVEKIT_TOKEN_HTTP_URL?: string;
 }
 
 interface ImportMeta {

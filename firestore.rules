@@ -33,6 +33,14 @@ service cloud.firestore {
       allow update: if isSignedIn() && isRequestRecipient(); // Only recipient can accept/deny
       allow delete: if isSignedIn() && isRequestParticipant();
     }
+
+    // Call sessions
+    match /callSessions/{callId} {
+      allow read: if isSignedIn() && isCallParticipant();
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.callerId;
+      allow update: if isSignedIn() && isCallParticipant();
+      allow delete: if false;
+    }
     
     // Admin settings - read by all, write by admin only
     match /settings/{doc=**} {
@@ -89,6 +97,11 @@ service cloud.firestore {
     function isRequestRecipient() {
       let req = resource.data;
       return request.auth.uid == req.recipientId;
+    }
+
+    function isCallParticipant() {
+      let call = resource.data;
+      return request.auth.uid == call.callerId || request.auth.uid == call.calleeId;
     }
   }
 }

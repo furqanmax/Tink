@@ -4,6 +4,43 @@ const { AccessToken } = require('livekit-server-sdk');
 
 admin.initializeApp();
 
+function getLiveKitCredentials() {
+  const apiKey = functions.config().livekit?.api_key || process.env.LIVEKIT_API_KEY;
+  const apiSecret = functions.config().livekit?.api_secret || process.env.LIVEKIT_API_SECRET;
+  const url = functions.config().livekit?.url || process.env.LIVEKIT_URL || 'ws://localhost:7880';
+  const defaultRoom = process.env.LIVEKIT_ROOM || 'default-room';
+  return { apiKey, apiSecret, url, defaultRoom };
+}
+
+function buildLiveKitToken({ roomName, userName, identity }) {
+  const { apiKey, apiSecret, url, defaultRoom } = getLiveKitCredentials();
+  if (!apiKey || !apiSecret) {
+    throw new Error('LiveKit credentials not configured');
+  }
+
+  const effectiveRoomName = roomName || defaultRoom;
+  if (!effectiveRoomName) {
+    throw new Error('LiveKit room not configured');
+  }
+
+  const token = new AccessToken(apiKey, apiSecret);
+  token.addGrant({
+    canPublish: true,
+    canPublishData: true,
+    canSubscribe: true,
+    room: effectiveRoomName,
+    roomJoin: true,
+    roomCreate: true,
+    identity,
+  });
+  token.name = userName;
+  return {
+    token: token.toJwt(),
+    url,
+    roomName: effectiveRoomName,
+  };
+}
+
 /**
  * Generate LiveKit access token for video calls
  */
@@ -18,46 +55,73 @@ exports.generateLiveKitToken = functions.https.onCall(async (data, context) => {
 
   const { roomName, userName } = data;
 
-  if (!roomName || !userName) {
+  if (!userName) {
     throw new functions.https.HttpsError(
       'invalid-argument',
-      'roomName and userName are required'
+      'userName is required'
     );
   }
 
   try {
-    const apiKey = functions.config().livekit?.api_key || process.env.LIVEKIT_API_KEY;
-    const apiSecret = functions.config().livekit?.api_secret || process.env.LIVEKIT_API_SECRET;
-
-    if (!apiKey || !apiSecret) {
-      throw new Error('LiveKit credentials not configured');
-    }
-
-    // Create token
-    const token = new AccessToken(apiKey, apiSecret);
-
-    token.addGrant({
-      canPublish: true,
-      canPublishData: true,
-      canSubscribe: true,
-      room: roomName,
-      roomJoin: true,
-      roomCreate: true,
+    return buildLiveKitToken({
+      roomName,
+      userName,
       identity: context.auth.uid,
     });
-
-    token.name = userName;
-
-    return {
-      token: token.toJwt(),
-      url: functions.config().livekit?.url || process.env.LIVEKIT_URL || 'ws://localhost:7880',
-    };
   } catch (error) {
     console.error('Token generation error:', error);
     throw new functions.https.HttpsError(
       'internal',
       'Failed to generate access token'
     );
+  }
+});
+
+/**
+ * Generate LiveKit token via HTTP endpoint (CORS-friendly fallback for local/dev)
+ */
+exports.generateLiveKitTokenHttp = functions.https.onRequest(async (req, res) => {
+  const origin = req.headers.origin || '*';
+  res.set('Access-Control-Allow-Origin', origin);
+  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set('Vary', 'Origin');
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  try {
+    const authHeader = req.headers.authorization || '';
+    const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!idToken) {
+      res.status(401).json({ error: 'Missing authorization token' });
+      return;
+    }
+
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const { roomName, userName } = req.body || {};
+    if (!userName) {
+      res.status(400).json({ error: 'userName is required' });
+      return;
+    }
+
+    const response = buildLiveKitToken({
+      roomName,
+      userName,
+      identity: decoded.uid,
+    });
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('HTTP token generation error:', error);
+    res.status(500).json({ error: 'Failed to generate access token' });
   }
 });
 

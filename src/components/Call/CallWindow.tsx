@@ -6,6 +6,7 @@ import { formatDuration } from '@/utils/formatters';
 import { PhoneOff, MicOff, VideoOff } from 'lucide-react';
 import { useAudioLevel } from '@/hooks/useAudioLevel';
 import { liveKitService } from '@/services/livekit';
+import { jitsiService } from '@/services/jitsi';
 
 interface CallWindowProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ export function CallWindow({ isOpen, onClose }: CallWindowProps) {
     currentCall,
     callState,
     room,
+    activeRoomName,
     remoteParticipants,
     audioEnabled,
     videoEnabled,
@@ -30,12 +32,16 @@ export function CallWindow({ isOpen, onClose }: CallWindowProps) {
   const { user } = useAuthStore();
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const jitsiContainerRef = useRef<HTMLDivElement>(null);
   const [callDuration, setCallDuration] = useState(0);
+  const [jitsiError, setJitsiError] = useState<string | null>(null);
   const localAudioTrack = liveKitService.getLocalAudioTrack();
   const audioLevel = useAudioLevel(localAudioTrack, audioEnabled);
+  const isJitsiProvider = (import.meta.env.VITE_CALL_PROVIDER || 'livekit').toLowerCase() === 'jitsi';
 
   // Update local video stream
   useEffect(() => {
+    if (isJitsiProvider) return;
     if (!room || !localVideoRef.current) return;
 
     const localParticipant = room.localParticipant;
@@ -45,10 +51,11 @@ export function CallWindow({ isOpen, onClose }: CallWindowProps) {
       const mediaStream = new MediaStream([videoTrack.mediaStreamTrack]);
       localVideoRef.current.srcObject = mediaStream;
     }
-  }, [room, videoEnabled]);
+  }, [room, videoEnabled, isJitsiProvider]);
 
   // Update remote video stream
   useEffect(() => {
+    if (isJitsiProvider) return;
     if (remoteParticipants.length === 0 || !remoteVideoRef.current) return;
 
     const remoteParticipant = remoteParticipants[0];
@@ -58,7 +65,26 @@ export function CallWindow({ isOpen, onClose }: CallWindowProps) {
       const mediaStream = new MediaStream([videoTrack.mediaStreamTrack]);
       remoteVideoRef.current.srcObject = mediaStream;
     }
-  }, [remoteParticipants]);
+  }, [remoteParticipants, isJitsiProvider]);
+
+  useEffect(() => {
+    if (!isJitsiProvider) return;
+    if (!isOpen || callState !== 'connected') return;
+    if (!activeRoomName || !jitsiContainerRef.current || !user) return;
+
+    setJitsiError(null);
+    jitsiService
+      .joinRoom(activeRoomName, user.displayName || user.email || 'User', jitsiContainerRef.current, {
+        audioOnly: !videoEnabled,
+      })
+      .catch((error) => {
+        setJitsiError((error as Error).message);
+      });
+
+    return () => {
+      void jitsiService.leaveRoom();
+    };
+  }, [isJitsiProvider, isOpen, callState, activeRoomName, user, videoEnabled]);
 
   // Call duration timer
   useEffect(() => {
@@ -93,6 +119,7 @@ export function CallWindow({ isOpen, onClose }: CallWindowProps) {
           <div>
             <h3 className="text-white font-medium">{currentCall?.remoteUserName || 'Unknown'}</h3>
             <p className="text-sm text-gray-400">
+              {callState === 'ringing' && 'Ringing...'}
               {callState === 'connecting' && 'Connecting...'}
               {callState === 'connected' && formatDuration(callDuration)}
               {callState === 'ended' && 'Call ended'}
@@ -110,6 +137,25 @@ export function CallWindow({ isOpen, onClose }: CallWindowProps) {
 
       {/* Video Grid */}
       <div className="flex-1 relative p-4">
+        {isJitsiProvider ? (
+          <div className="absolute inset-4 bg-gray-800 rounded-2xl overflow-hidden">
+            {callState === 'connected' ? (
+              <div ref={jitsiContainerRef} className="w-full h-full" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <p className="text-gray-300">
+                  {callState === 'ringing' ? 'Ringing...' : 'Connecting...'}
+                </p>
+              </div>
+            )}
+            {jitsiError && (
+              <div className="absolute bottom-3 left-3 right-3 bg-red-500/90 text-white text-sm px-3 py-2 rounded-lg">
+                {jitsiError}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
         {/* Remote Video (Full Screen) */}
         <div className="absolute inset-4 bg-gray-800 rounded-2xl overflow-hidden">
           {remoteParticipants.length > 0 ? (
@@ -128,7 +174,11 @@ export function CallWindow({ isOpen, onClose }: CallWindowProps) {
                   </span>
                 </div>
                 <p className="text-gray-400">
-                  {callState === 'connecting' ? 'Connecting...' : 'Waiting for video...'}
+                  {callState === 'ringing'
+                    ? 'Waiting for answer...'
+                    : callState === 'connecting'
+                    ? 'Connecting...'
+                    : 'Waiting for video...'}
                 </p>
               </div>
             </div>
@@ -176,6 +226,8 @@ export function CallWindow({ isOpen, onClose }: CallWindowProps) {
             />
           </div>
         </div>
+          </>
+        )}
       </div>
 
       {/* Controls */}

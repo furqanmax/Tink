@@ -20,10 +20,10 @@ service cloud.firestore {
     
     // Conversations - readable/writable by participants
     match /conversations/{conversationId} {
-      allow read: if isSignedIn() && isConversationParticipant();
-      allow create: if isSignedIn() && isConversationParticipant();
-      allow update: if isSignedIn() && isConversationParticipant();
-      allow delete: if isSignedIn() && isConversationParticipant();
+      allow read: if isSignedIn() && isConversationParticipant(resource.data);
+      allow create: if isSignedIn() && isConversationParticipant(request.resource.data);
+      allow update: if isSignedIn() && isConversationParticipant(resource.data);
+      allow delete: if isSignedIn() && isConversationParticipant(resource.data);
     }
     
     // Friend requests
@@ -73,8 +73,7 @@ service cloud.firestore {
       return request.auth.uid == msg.recipientId;
     }
     
-    function isConversationParticipant() {
-      let conv = resource.data;
+    function isConversationParticipant(conv) {
       return request.auth.uid in (conv.participants || []);
     }
     

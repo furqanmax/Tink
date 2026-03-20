@@ -34,6 +34,8 @@ export interface Message {
     name: string;
     size: number;
     hash: string;
+    fileId?: string;
+    mimeType?: string;
     downloadUrl?: string;
   };
 }

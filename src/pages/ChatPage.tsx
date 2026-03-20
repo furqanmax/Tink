@@ -17,7 +17,7 @@ import { UserPlus, Shield } from 'lucide-react';
 export function ChatPage() {
   const { user, userProfile, logout } = useAuthStore();
   const { callState } = useCallStore();
-  const { incomingRequests, loadFriendRequests } = useFriendRequestStore();
+  const { incomingRequests, loadFriendRequests, cleanup } = useFriendRequestStore();
   
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'chats' | 'contacts'>('chats');
@@ -40,7 +40,10 @@ export function ChatPage() {
     if (user) {
       loadFriendRequests();
     }
-  }, [user, loadFriendRequests]);
+    return () => {
+      cleanup();
+    };
+  }, [user, loadFriendRequests, cleanup]);
 
   // Show call window when in call
   useEffect(() => {
@@ -152,7 +155,10 @@ export function ChatPage() {
 
             {/* Search */}
             <div className="p-4 border-b border-gray-200">
-              <UserSearch onSelectContact={setSelectedContact} />
+              <UserSearch
+                onSelectContact={setSelectedContact}
+                onOpenRequests={() => setShowFriendRequests(true)}
+              />
             </div>
 
             {/* Content */}

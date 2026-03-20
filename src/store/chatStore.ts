@@ -95,6 +95,8 @@ interface ChatState {
   loadConversationHistory: (conversationId: string, currentUserId: string) => Promise<void>;
   subscribeToMessages: (conversationId: string, currentUserId: string) => Unsubscribe;
   sendMessage: (conversationId: string, content: string) => Promise<void>;
+  addLocalMessage: (message: Message) => void;
+  updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void;
   setActiveConversation: (conversationId: string | null) => void;
   markAsRead: (conversationId: string) => Promise<void>;
   cleanup: () => void;
@@ -288,6 +290,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.error('Failed to send message:', error);
       throw error;
     }
+  },
+
+  addLocalMessage: (message) => {
+    set((state) => {
+      const existing = state.conversations[message.conversationId] || [];
+      return {
+        conversations: {
+          ...state.conversations,
+          [message.conversationId]: mergeMessages(existing, [message]),
+        },
+      };
+    });
+  },
+
+  updateMessage: (conversationId, messageId, updates) => {
+    set((state) => ({
+      conversations: {
+        ...state.conversations,
+        [conversationId]: (state.conversations[conversationId] || []).map((msg) =>
+          msg.messageId === messageId ? { ...msg, ...updates } : msg
+        ),
+      },
+    }));
   },
 
   setActiveConversation: (conversationId: string | null) => {

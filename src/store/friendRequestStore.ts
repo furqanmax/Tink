@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, deleteDoc, getDocs, serverTimestamp, writeBatch, arrayUnion, setDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, deleteDoc, getDocs, serverTimestamp, writeBatch, arrayUnion, arrayRemove, setDoc, getDoc, orderBy } from 'firebase/firestore';
 import { firestore, auth } from '@/config/firebase';
 import { FriendRequest, User } from '@/types';
 import { notificationService } from '@/services/notification';
@@ -16,8 +16,33 @@ interface FriendRequestState {
   acceptFriendRequest: (requestId: string) => Promise<void>;
   rejectFriendRequest: (requestId: string) => Promise<void>;
   cancelFriendRequest: (requestId: string) => Promise<void>;
+  unfriendUser: (targetUserId: string) => Promise<void>;
+  blockUser: (targetUserId: string) => Promise<void>;
   loadFriendRequests: () => void;
   cleanup: () => void;
+}
+
+function toMillis(value: unknown): number {
+  if (!value) return Date.now();
+  if (typeof value === 'number') return value;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'object' && value !== null && 'toMillis' in value && typeof (value as any).toMillis === 'function') {
+    return (value as any).toMillis();
+  }
+  return Date.now();
+}
+
+function mapRequestDoc(id: string, data: any): FriendRequest {
+  return {
+    id,
+    senderId: data.senderId,
+    senderName: data.senderName,
+    recipientId: data.recipientId,
+    recipientName: data.recipientName,
+    status: data.status,
+    createdAt: toMillis(data.createdAt),
+    updatedAt: toMillis(data.updatedAt),
+  };
 }
 
 export const useFriendRequestStore = create<FriendRequestState>((set, get) => ({
@@ -42,30 +67,75 @@ export const useFriendRequestStore = create<FriendRequestState>((set, get) => ({
       if (currentUserData?.friends?.includes(recipientId)) {
         throw new Error('Already friends with this user');
       }
+      if (currentUserData?.blockedUsers?.includes(recipientId)) {
+        throw new Error('Unblock this user before sending a friend request');
+      }
 
-      // Check if request already exists
-      const existingQuery = query(
+      const recipientDoc = await getDoc(doc(firestore, 'users', recipientId));
+      if (!recipientDoc.exists()) {
+        throw new Error('User not found');
+      }
+      const recipientData = recipientDoc.data() as User;
+
+      if (recipientData?.blockedUsers?.includes(currentUser.uid)) {
+        throw new Error('Unable to send request to this user');
+      }
+
+      // Check if current user already sent a pending request
+      const sentPendingQuery = query(
         collection(firestore, 'friendRequests'),
         where('senderId', '==', currentUser.uid),
         where('recipientId', '==', recipientId),
         where('status', '==', 'pending')
       );
-      
-      const existing = await getDocs(existingQuery);
-      if (!existing.empty) {
+
+      const sentPending = await getDocs(sentPendingQuery);
+      if (!sentPending.empty) {
         throw new Error('Friend request already sent');
       }
 
+      // Check if recipient already sent a pending request
+      const receivedPendingQuery = query(
+        collection(firestore, 'friendRequests'),
+        where('senderId', '==', recipientId),
+        where('recipientId', '==', currentUser.uid),
+        where('status', '==', 'pending')
+      );
+
+      const receivedPending = await getDocs(receivedPendingQuery);
+      if (!receivedPending.empty) {
+        throw new Error('This user already sent you a request. Check Incoming requests.');
+      }
+
       // Create friend request
-      await addDoc(collection(firestore, 'friendRequests'), {
+      const createdRequest = {
         senderId: currentUser.uid,
-        senderName: currentUser.displayName || currentUser.email,
+        senderName: currentUser.displayName || currentUser.email || 'Unknown',
         recipientId,
         recipientName,
         status: 'pending',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      const requestRef = await addDoc(collection(firestore, 'friendRequests'), createdRequest);
+
+      // Optimistically reflect the sent request in UI until snapshot arrives.
+      set((state) => ({
+        outgoingRequests: [
+          {
+            id: requestRef.id,
+            senderId: currentUser.uid,
+            senderName: currentUser.displayName || currentUser.email || 'Unknown',
+            recipientId,
+            recipientName,
+            status: 'pending',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+          ...state.outgoingRequests.filter((request) => request.id !== requestRef.id),
+        ],
+      }));
 
       // Send notification to recipient
       notificationService.notifyFriendRequest(
@@ -95,8 +165,17 @@ export const useFriendRequestStore = create<FriendRequestState>((set, get) => ({
       const requestSnap = await getDoc(requestRef);
       if (!requestSnap.exists()) throw new Error('Request not found');
       const requestData = requestSnap.data() as FriendRequest;
+
+      if (requestData.status !== 'pending') {
+        throw new Error('Request is no longer pending');
+      }
+
       const senderId = requestData.senderId;
       const recipientId = requestData.recipientId;
+
+      if (currentUser.uid !== recipientId) {
+        throw new Error('Not authorized to accept this request');
+      }
 
       // Use batch write for atomic operation
       const batch = writeBatch(firestore);
@@ -129,7 +208,7 @@ export const useFriendRequestStore = create<FriendRequestState>((set, get) => ({
         lastMessage: '',
         lastMessageTime: serverTimestamp(),
         createdAt: serverTimestamp(),
-      });
+      }, { merge: true });
 
     } catch (error) {
       console.error('Failed to accept friend request:', error);
@@ -141,10 +220,24 @@ export const useFriendRequestStore = create<FriendRequestState>((set, get) => ({
   },
 
   rejectFriendRequest: async (requestId: string) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('Not authenticated');
+
     set({ loading: true, error: null });
     
     try {
       const requestRef = doc(firestore, 'friendRequests', requestId);
+      const requestSnap = await getDoc(requestRef);
+      if (!requestSnap.exists()) throw new Error('Request not found');
+
+      const requestData = requestSnap.data() as FriendRequest;
+      if (requestData.status !== 'pending') {
+        throw new Error('Request is no longer pending');
+      }
+      if (requestData.recipientId !== currentUser.uid) {
+        throw new Error('Not authorized to reject this request');
+      }
+
       await updateDoc(requestRef, {
         status: 'denied',
         updatedAt: serverTimestamp(),
@@ -159,12 +252,123 @@ export const useFriendRequestStore = create<FriendRequestState>((set, get) => ({
   },
 
   cancelFriendRequest: async (requestId: string) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('Not authenticated');
+
     set({ loading: true, error: null });
     
     try {
-      await deleteDoc(doc(firestore, 'friendRequests', requestId));
+      const requestRef = doc(firestore, 'friendRequests', requestId);
+      const requestSnap = await getDoc(requestRef);
+      if (!requestSnap.exists()) return;
+
+      const requestData = requestSnap.data() as FriendRequest;
+      if (requestData.status !== 'pending') {
+        throw new Error('Only pending requests can be canceled');
+      }
+      if (requestData.senderId !== currentUser.uid) {
+        throw new Error('Not authorized to cancel this request');
+      }
+
+      await deleteDoc(requestRef);
     } catch (error) {
       console.error('Failed to cancel friend request:', error);
+      set({ error: (error as Error).message });
+      throw error;
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  unfriendUser: async (targetUserId: string) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('Not authenticated');
+    if (currentUser.uid === targetUserId) throw new Error('Invalid user');
+
+    set({ loading: true, error: null });
+
+    try {
+      const batch = writeBatch(firestore);
+      const currentUserRef = doc(firestore, 'users', currentUser.uid);
+      const targetUserRef = doc(firestore, 'users', targetUserId);
+      const conversationRef = doc(firestore, 'conversations', [currentUser.uid, targetUserId].sort().join('_'));
+
+      batch.update(currentUserRef, {
+        friends: arrayRemove(targetUserId),
+      });
+      batch.update(targetUserRef, {
+        friends: arrayRemove(currentUser.uid),
+      });
+      batch.delete(conversationRef);
+
+      await batch.commit();
+    } catch (error) {
+      console.error('Failed to unfriend user:', error);
+      set({ error: (error as Error).message });
+      throw error;
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  blockUser: async (targetUserId: string) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('Not authenticated');
+    if (currentUser.uid === targetUserId) throw new Error('Invalid user');
+
+    set({ loading: true, error: null });
+
+    try {
+      const pendingSentQuery = query(
+        collection(firestore, 'friendRequests'),
+        where('senderId', '==', currentUser.uid),
+        where('recipientId', '==', targetUserId),
+        where('status', '==', 'pending')
+      );
+      const pendingReceivedQuery = query(
+        collection(firestore, 'friendRequests'),
+        where('senderId', '==', targetUserId),
+        where('recipientId', '==', currentUser.uid),
+        where('status', '==', 'pending')
+      );
+
+      const [pendingSent, pendingReceived] = await Promise.all([
+        getDocs(pendingSentQuery),
+        getDocs(pendingReceivedQuery),
+      ]);
+
+      const cleanupBatch = writeBatch(firestore);
+      pendingSent.docs.forEach((requestDoc) => cleanupBatch.delete(requestDoc.ref));
+      pendingReceived.docs.forEach((requestDoc) =>
+        cleanupBatch.update(requestDoc.ref, {
+          status: 'denied',
+          updatedAt: serverTimestamp(),
+        })
+      );
+      await cleanupBatch.commit();
+
+      const relationshipBatch = writeBatch(firestore);
+      const currentUserRef = doc(firestore, 'users', currentUser.uid);
+      const targetUserRef = doc(firestore, 'users', targetUserId);
+      const conversationRef = doc(firestore, 'conversations', [currentUser.uid, targetUserId].sort().join('_'));
+
+      relationshipBatch.update(currentUserRef, {
+        blockedUsers: arrayUnion(targetUserId),
+        friends: arrayRemove(targetUserId),
+      });
+      relationshipBatch.update(targetUserRef, {
+        friends: arrayRemove(currentUser.uid),
+      });
+      relationshipBatch.delete(conversationRef);
+
+      await relationshipBatch.commit();
+
+      set((state) => ({
+        incomingRequests: state.incomingRequests.filter((request) => request.senderId !== targetUserId),
+        outgoingRequests: state.outgoingRequests.filter((request) => request.recipientId !== targetUserId),
+      }));
+    } catch (error) {
+      console.error('Failed to block user:', error);
       set({ error: (error as Error).message });
       throw error;
     } finally {
@@ -176,18 +380,20 @@ export const useFriendRequestStore = create<FriendRequestState>((set, get) => ({
     const currentUser = auth.currentUser;
     if (!currentUser) return;
 
+    // Prevent duplicate live subscriptions when this action is called repeatedly.
+    const { unsubscribers } = get();
+    unsubscribers.forEach((unsubscribe) => unsubscribe());
+
     // Subscribe to incoming requests
     const incomingQuery = query(
       collection(firestore, 'friendRequests'),
       where('recipientId', '==', currentUser.uid),
-      where('status', '==', 'pending')
+      where('status', '==', 'pending'),
+      orderBy('createdAt', 'desc')
     );
 
     const unsubscribeIncoming = onSnapshot(incomingQuery, (snapshot) => {
-      const requests = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      } as FriendRequest));
+      const requests = snapshot.docs.map((requestDoc) => mapRequestDoc(requestDoc.id, requestDoc.data()));
       set({ incomingRequests: requests });
     }, (error) => {
       console.error('Incoming requests subscription error:', error);
@@ -197,14 +403,12 @@ export const useFriendRequestStore = create<FriendRequestState>((set, get) => ({
     const outgoingQuery = query(
       collection(firestore, 'friendRequests'),
       where('senderId', '==', currentUser.uid),
-      where('status', '==', 'pending')
+      where('status', 'in', ['pending', 'denied']),
+      orderBy('createdAt', 'desc')
     );
 
     const unsubscribeOutgoing = onSnapshot(outgoingQuery, (snapshot) => {
-      const requests = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      } as FriendRequest));
+      const requests = snapshot.docs.map((requestDoc) => mapRequestDoc(requestDoc.id, requestDoc.data()));
       set({ outgoingRequests: requests });
     }, (error) => {
       console.error('Outgoing requests subscription error:', error);

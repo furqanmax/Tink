@@ -4,11 +4,16 @@ import { firestore } from '@/config/firebase';
 import { useAuthStore } from '@/store/authStore';
 import { useChatStore } from '@/store/chatStore';
 import { useCallStore } from '@/store/callStore';
+import { useFriendRequestStore } from '@/store/friendRequestStore';
 import { User } from '@/types';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { FilePicker } from './FilePicker';
-import { Video, Phone, MoreVertical, ArrowLeft, Paperclip } from 'lucide-react';
+import { Video, Phone, MoreVertical, ArrowLeft, Paperclip, UserMinus, ShieldX } from 'lucide-react';
+import { fileShareService } from '@/services/fileShare';
+import { EncryptionService } from '@/services/encryption';
+import { indexedDBService } from '@/services/indexeddb';
+import { v4 as uuidv4 } from 'uuid';
 
 interface ChatWindowProps {
   contactId: string;
@@ -17,12 +22,15 @@ interface ChatWindowProps {
 }
 
 export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps) {
-  const { user } = useAuthStore();
-  const { conversations, loadConversationHistory, subscribeToMessages, sendMessage, markAsRead } = useChatStore();
+  const { user, userProfile } = useAuthStore();
+  const { conversations, loadConversationHistory, subscribeToMessages, sendMessage, markAsRead, addLocalMessage, updateMessage } = useChatStore();
   const { initiateCall } = useCallStore();
+  const { unfriendUser, blockUser } = useFriendRequestStore();
   const [contact, setContact] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [showFilePicker, setShowFilePicker] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const conversationId = user ? [user.uid, contactId].sort().join('_') : '';
@@ -59,6 +67,9 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
       const convDoc = await getDoc(convRef);
       
       if (!convDoc.exists() && user && contact) {
+        const isFriend = !!userProfile?.friends?.includes(contactId);
+        if (!isFriend) return;
+
         await setDoc(convRef, {
           participants: [user.uid, contactId],
           participantNames: [user.displayName || user.email, contact?.displayName || contact?.email],
@@ -74,7 +85,7 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
     return () => {
       unsubscribe?.();
     };
-  }, [user, contactId, conversationId, contact]);
+  }, [user, userProfile, contactId, conversationId, contact]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -114,10 +125,165 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
     }
   };
 
-  const handleFileSelect = (file: File) => {
-    setShowFilePicker(false);
-    console.log('Selected file:', file);
+  const handleUnfriend = async () => {
+    setActionError(null);
+    try {
+      await unfriendUser(contactId);
+      setShowActionsMenu(false);
+      onClose();
+    } catch (error) {
+      setActionError((error as Error).message);
+    }
   };
+
+  const handleBlock = async () => {
+    setActionError(null);
+    const confirmed = window.confirm('Block this user? They will be removed from your friends and pending requests.');
+    if (!confirmed) return;
+
+    try {
+      await blockUser(contactId);
+      setShowActionsMenu(false);
+      onClose();
+    } catch (error) {
+      setActionError((error as Error).message);
+    }
+  };
+
+  const handleFileSelect = async (file: File) => {
+    setShowFilePicker(false);
+    if (!user || !conversationId) return;
+
+    const validation = fileShareService.validateFile(file);
+    if (!validation.valid) {
+      console.error(validation.error);
+      return;
+    }
+
+    const messageId = uuidv4();
+    const recipientId = contactId;
+    const senderName = user.displayName || user.email || 'You';
+
+    const buffer = await file.arrayBuffer();
+    const hash = await EncryptionService.hashData(buffer);
+
+    const fileMessage = {
+      messageId,
+      conversationId,
+      senderId: user.uid,
+      senderName,
+      recipientId,
+      content: file.name,
+      timestamp: Date.now(),
+      isRead: false,
+      type: 'file' as const,
+      fileData: {
+        fileId: messageId,
+        name: file.name,
+        size: file.size,
+        hash,
+        mimeType: file.type,
+      },
+    };
+
+    addLocalMessage(fileMessage);
+    await indexedDBService.saveMessage({ ...fileMessage, recipientId });
+
+    await setDoc(doc(firestore, 'messages', messageId), {
+      ...fileMessage,
+      createdAt: serverTimestamp(),
+      timestamp: serverTimestamp(),
+    });
+
+    await updateDoc(doc(firestore, 'conversations', conversationId), {
+      lastMessage: `File: ${file.name}`,
+      lastMessageTime: serverTimestamp(),
+    });
+
+    await fileShareService.sendOrQueueFile({
+      fileId: messageId,
+      conversationId,
+      recipientId,
+      senderId: user.uid,
+      senderName,
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      hash,
+      file,
+      createdAt: Date.now(),
+    });
+  };
+
+  useEffect(() => {
+    if (!user || !conversationId) return;
+    const userName = user.displayName || user.email || 'User';
+
+    fileShareService.connect(conversationId, userName, {
+      onPeerAvailable: () => {
+        fileShareService.flushPending(conversationId).catch(() => {});
+      },
+      onReceived: async (file, meta) => {
+        const downloadUrl = URL.createObjectURL(file);
+        updateMessage(conversationId, meta.fileId, {
+          fileData: {
+            fileId: meta.fileId,
+            name: meta.name,
+            size: meta.size,
+            hash: meta.hash,
+            mimeType: meta.type,
+            downloadUrl,
+          },
+        });
+
+        const local = await indexedDBService.getMessage(meta.fileId);
+        if (!local) {
+          addLocalMessage({
+            messageId: meta.fileId,
+            conversationId,
+            senderId: meta.senderId,
+            senderName: meta.senderName,
+            recipientId: user?.uid || '',
+            content: meta.name,
+            timestamp: Date.now(),
+            isRead: false,
+            type: 'file',
+            fileData: {
+              fileId: meta.fileId,
+              name: meta.name,
+              size: meta.size,
+              hash: meta.hash,
+              mimeType: meta.type,
+              downloadUrl,
+            },
+          });
+          await indexedDBService.saveMessage({
+            messageId: meta.fileId,
+            conversationId,
+            senderId: meta.senderId,
+            senderName: meta.senderName,
+            recipientId: user?.uid || '',
+            content: meta.name,
+            timestamp: Date.now(),
+            isRead: false,
+            type: 'file',
+            fileData: {
+              fileId: meta.fileId,
+              name: meta.name,
+              size: meta.size,
+              hash: meta.hash,
+              mimeType: meta.type,
+              downloadUrl,
+            },
+          });
+        }
+      },
+    }).catch(() => {});
+
+    return () => {
+      fileShareService.disconnect(conversationId).catch(() => {});
+    };
+  }, [conversationId, user, updateMessage]);
 
   if (loading) {
     return (
@@ -194,7 +360,7 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
           </div>
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 relative">
           <button 
             onClick={handleAudioCall}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -216,11 +382,40 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
           >
             <Paperclip className="w-5 h-5 text-gray-600" />
           </button>
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+          <button
+            onClick={() => setShowActionsMenu((prev) => !prev)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
             <MoreVertical className="w-5 h-5 text-gray-600" />
           </button>
+          {showActionsMenu && (
+            <div className="absolute right-0 top-12 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-30">
+              {userProfile?.friends?.includes(contactId) && (
+                <button
+                  onClick={handleUnfriend}
+                  className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                >
+                  <UserMinus className="w-4 h-4" />
+                  Unfriend
+                </button>
+              )}
+              <button
+                onClick={handleBlock}
+                className="w-full px-3 py-2 text-sm text-left text-red-600 hover:bg-red-50 flex items-center gap-2"
+              >
+                <ShieldX className="w-4 h-4" />
+                Block
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {actionError && (
+        <div className="px-4 py-2 border-b border-red-100 bg-red-50">
+          <p className="text-sm text-red-700">{actionError}</p>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 min-h-0 overflow-y-auto bg-gray-50 overscroll-contain">

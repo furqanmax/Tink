@@ -50,12 +50,47 @@ interface VideoChatDB extends DBSchema {
       createdAt: number;
     };
   };
+  pendingFiles: {
+    key: string;
+    value: {
+      fileId: string;
+      conversationId: string;
+      recipientId: string;
+      senderId: string;
+      senderName: string;
+      name: string;
+      type: string;
+      size: number;
+      hash: string;
+      file: Blob;
+      createdAt: number;
+    };
+    indexes: {
+      'by-conversation': string;
+    };
+  };
+  files: {
+    key: string;
+    value: {
+      fileId: string;
+      conversationId: string;
+      name: string;
+      type: string;
+      size: number;
+      hash: string;
+      file: Blob;
+      createdAt: number;
+    };
+    indexes: {
+      'by-conversation': string;
+    };
+  };
 }
 
 class IndexedDBService {
   private db: IDBPDatabase<VideoChatDB> | null = null;
   private readonly DB_NAME = 'tink-db';
-  private readonly DB_VERSION = 1;
+  private readonly DB_VERSION = 2;
 
   async initialize(): Promise<void> {
     if (this.db) return;
@@ -92,6 +127,18 @@ class IndexedDBService {
         // User keys store (for encryption)
         if (!db.objectStoreNames.contains('userKeys')) {
           db.createObjectStore('userKeys', { keyPath: 'userId' });
+        }
+
+        // Pending files store (for offline recipients)
+        if (!db.objectStoreNames.contains('pendingFiles')) {
+          const pendingStore = db.createObjectStore('pendingFiles', { keyPath: 'fileId' });
+          pendingStore.createIndex('by-conversation', 'conversationId');
+        }
+
+        // Received files store
+        if (!db.objectStoreNames.contains('files')) {
+          const filesStore = db.createObjectStore('files', { keyPath: 'fileId' });
+          filesStore.createIndex('by-conversation', 'conversationId');
         }
       },
     });
@@ -235,6 +282,35 @@ class IndexedDBService {
     await this.db!.clear('contacts');
     await this.db!.clear('callHistory');
     await this.db!.clear('userKeys');
+    await this.db!.clear('pendingFiles');
+    await this.db!.clear('files');
+  }
+
+  // Pending Files
+  async savePendingFile(payload: VideoChatDB['pendingFiles']['value']): Promise<void> {
+    if (!this.db) await this.initialize();
+    await this.db!.put('pendingFiles', payload);
+  }
+
+  async getPendingFiles(conversationId: string): Promise<VideoChatDB['pendingFiles']['value'][]> {
+    if (!this.db) await this.initialize();
+    return await this.db!.getAllFromIndex('pendingFiles', 'by-conversation', conversationId);
+  }
+
+  async deletePendingFile(fileId: string): Promise<void> {
+    if (!this.db) await this.initialize();
+    await this.db!.delete('pendingFiles', fileId);
+  }
+
+  // Received Files
+  async saveFile(payload: VideoChatDB['files']['value']): Promise<void> {
+    if (!this.db) await this.initialize();
+    await this.db!.put('files', payload);
+  }
+
+  async getFile(fileId: string): Promise<VideoChatDB['files']['value'] | undefined> {
+    if (!this.db) await this.initialize();
+    return await this.db!.get('files', fileId);
   }
 }
 

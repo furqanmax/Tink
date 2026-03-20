@@ -150,7 +150,13 @@ export function FriendRequestsPanel({ isOpen, onClose }: FriendRequestsPanelProp
                       {activeTab === 'incoming' ? request.senderName : request.recipientName}
                     </p>
                     <p className="text-sm text-gray-500">
-                      {activeTab === 'incoming' ? 'Wants to be your friend' : 'Request pending'}
+                      {activeTab === 'incoming'
+                        ? 'Wants to be your friend'
+                        : request.status === 'denied'
+                        ? 'Request declined'
+                        : request.status === 'accepted'
+                        ? 'Request accepted'
+                        : 'Request pending'}
                     </p>
                   </div>
 
@@ -175,14 +181,23 @@ export function FriendRequestsPanel({ isOpen, onClose }: FriendRequestsPanelProp
                         <X className="w-5 h-5" />
                       </button>
                     </div>
+                  ) : request.status === 'pending' ? (
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-1 text-xs bg-amber-100 text-amber-700 rounded-full">
+                        Pending
+                      </span>
+                      <button
+                        onClick={() => handleCancel(request.id)}
+                        disabled={processingId === request.id}
+                        className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-lg transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   ) : (
-                    <button
-                      onClick={() => handleCancel(request.id)}
-                      disabled={processingId === request.id}
-                      className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-lg transition-colors"
-                    >
-                      Cancel
-                    </button>
+                    <span className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded-full">
+                      Declined
+                    </span>
                   )}
                 </div>
               ))}

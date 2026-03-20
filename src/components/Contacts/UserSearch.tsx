@@ -2,19 +2,27 @@ import { useState, useEffect, useCallback } from 'react';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { firestore } from '@/config/firebase';
 import { useAuthStore } from '@/store/authStore';
+import { useFriendRequestStore } from '@/store/friendRequestStore';
 import { User } from '@/types';
-import { Search, UserPlus, X } from 'lucide-react';
+import { Search, UserPlus, X, MessageCircle, Clock, Inbox, ShieldX } from 'lucide-react';
 
 interface UserSearchProps {
   onSelectContact: (userId: string) => void;
+  onOpenRequests?: () => void;
 }
 
-export function UserSearch({ onSelectContact }: UserSearchProps) {
+export function UserSearch({ onSelectContact, onOpenRequests }: UserSearchProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const { user } = useAuthStore();
+  const [sendingTo, setSendingTo] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
+  const { user, userProfile } = useAuthStore();
+  const { sendFriendRequest, incomingRequests, outgoingRequests } = useFriendRequestStore();
+
+  const outgoingByRecipient = new Set(outgoingRequests.map((request) => request.recipientId));
+  const incomingBySender = new Set(incomingRequests.map((request) => request.senderId));
 
   const searchUsers = useCallback(async (searchText: string) => {
     if (!searchText.trim() || !user) {
@@ -25,22 +33,36 @@ export function UserSearch({ onSelectContact }: UserSearchProps) {
     setLoading(true);
     try {
       const usersRef = collection(firestore, 'users');
-      const searchLower = searchText.toLowerCase();
+      const trimmedSearch = searchText.trim();
       
-      // Search by displayName or email
-      const q = query(
+      // Try display name prefix match.
+      const displayNameQuery = query(
         usersRef,
-        where('displayName', '>=', searchLower),
-        where('displayName', '<=', searchLower + '\uf8ff'),
+        where('displayName', '>=', trimmedSearch),
+        where('displayName', '<=', trimmedSearch + '\uf8ff'),
         limit(10)
       );
 
-      const snapshot = await getDocs(q);
-      const results = snapshot.docs
-        .map(doc => ({ ...doc.data(), uid: doc.id } as User))
-        .filter(u => u.uid !== user.uid); // Exclude current user
+      // Fallback to email prefix match for users without matching display names.
+      const emailQuery = query(
+        usersRef,
+        where('email', '>=', trimmedSearch),
+        where('email', '<=', trimmedSearch + '\uf8ff'),
+        limit(10)
+      );
 
-      setSearchResults(results);
+      const [displayNameSnapshot, emailSnapshot] = await Promise.all([
+        getDocs(displayNameQuery),
+        getDocs(emailQuery),
+      ]);
+
+      const byId = new Map<string, User>();
+      for (const userDoc of [...displayNameSnapshot.docs, ...emailSnapshot.docs]) {
+        if (userDoc.id === user.uid) continue;
+        byId.set(userDoc.id, { ...userDoc.data(), uid: userDoc.id } as User);
+      }
+
+      setSearchResults(Array.from(byId.values()));
       setShowResults(true);
     } catch (error) {
       console.error('Search error:', error);
@@ -57,11 +79,30 @@ export function UserSearch({ onSelectContact }: UserSearchProps) {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, searchUsers]);
 
-  const handleSelectUser = (selectedUser: User) => {
-    onSelectContact(selectedUser.uid);
+  const clearSearch = () => {
     setSearchQuery('');
     setShowResults(false);
     setSearchResults([]);
+  };
+
+  const handleOpenChat = (selectedUser: User) => {
+    onSelectContact(selectedUser.uid);
+    clearSearch();
+  };
+
+  const handleSendRequest = async (selectedUser: User) => {
+    setRequestError(null);
+    setSendingTo(selectedUser.uid);
+    try {
+      await sendFriendRequest(
+        selectedUser.uid,
+        selectedUser.displayName || selectedUser.email || 'Unknown User'
+      );
+    } catch (error) {
+      setRequestError((error as Error).message);
+    } finally {
+      setSendingTo(null);
+    }
   };
 
   return (
@@ -78,8 +119,7 @@ export function UserSearch({ onSelectContact }: UserSearchProps) {
         {searchQuery && (
           <button
             onClick={() => {
-              setSearchQuery('');
-              setShowResults(false);
+              clearSearch();
             }}
             className="absolute right-3 top-1/2 transform -translate-y-1/2"
           >
@@ -92,9 +132,8 @@ export function UserSearch({ onSelectContact }: UserSearchProps) {
       {showResults && searchResults.length > 0 && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 max-h-64 overflow-y-auto">
           {searchResults.map((result) => (
-            <button
+            <div
               key={result.uid}
-              onClick={() => handleSelectUser(result)}
               className="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left"
             >
               <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
@@ -116,10 +155,57 @@ export function UserSearch({ onSelectContact }: UserSearchProps) {
                 </p>
                 <p className="text-sm text-gray-500 truncate">{result.email}</p>
               </div>
-              <UserPlus className="w-4 h-4 text-blue-500" />
-            </button>
+
+              {userProfile?.blockedUsers?.includes(result.uid) ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-red-100 text-red-700 rounded-lg">
+                  <ShieldX className="w-3.5 h-3.5" />
+                  Blocked
+                </span>
+              ) : userProfile?.friends?.includes(result.uid) ? (
+                <button
+                  type="button"
+                  onClick={() => handleOpenChat(result)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  Chat
+                </button>
+              ) : incomingBySender.has(result.uid) ? (
+                <button
+                  type="button"
+                  onClick={onOpenRequests}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition-colors"
+                >
+                  <Inbox className="w-3.5 h-3.5" />
+                  Incoming
+                </button>
+              ) : outgoingByRecipient.has(result.uid) ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-gray-100 text-gray-600 rounded-lg">
+                  <Clock className="w-3.5 h-3.5" />
+                  Sent
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleSendRequest(result)}
+                  disabled={sendingTo === result.uid}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-60"
+                >
+                  {sendingTo === result.uid ? (
+                    <div className="w-3.5 h-3.5 border-2 border-blue-700 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <UserPlus className="w-3.5 h-3.5" />
+                  )}
+                  Add
+                </button>
+              )}
+            </div>
           ))}
         </div>
+      )}
+
+      {requestError && (
+        <p className="mt-2 text-xs text-red-600">{requestError}</p>
       )}
 
       {/* No Results */}

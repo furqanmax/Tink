@@ -15,6 +15,16 @@ interface ContactWithConversation extends User {
   unreadCount?: number;
 }
 
+function normalizeTimestamp(value: unknown): number {
+  if (!value) return 0;
+  if (typeof value === 'number') return value;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'object' && value !== null && 'toMillis' in value && typeof (value as any).toMillis === 'function') {
+    return (value as any).toMillis();
+  }
+  return 0;
+}
+
 export function ContactsList({ onSelectContact, selectedContact }: ContactsListProps) {
   const { user } = useAuthStore();
   const [contacts, setContacts] = useState<ContactWithConversation[]>([]);
@@ -61,8 +71,8 @@ export function ContactsList({ onSelectContact, selectedContact }: ContactsListP
       const filtered = results.filter(Boolean) as ContactWithConversation[];
 
       filtered.sort((a, b) => {
-        const aTime = a.conversation?.lastMessageTime || 0;
-        const bTime = b.conversation?.lastMessageTime || 0;
+        const aTime = normalizeTimestamp(a.conversation?.lastMessageTime);
+        const bTime = normalizeTimestamp(b.conversation?.lastMessageTime);
         return bTime - aTime;
       });
 

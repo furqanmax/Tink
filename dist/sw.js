@@ -84,16 +84,22 @@ self.addEventListener('fetch', (event) => {
 
 // Push notification event
 self.addEventListener('push', (event) => {
-  const data = event.data?.json() ?? {};
-  const title = data.notification?.title || 'Video Chat';
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch (e) {
+    payload = { notification: { title: 'Tink', body: event.data?.text?.() || 'New notification' } };
+  }
+
+  const title = payload.notification?.title || 'Tink';
   const options = {
-    body: data.notification?.body || 'New notification',
+    body: payload.notification?.body || 'New notification',
     icon: '/icon.svg',
     badge: '/icon.svg',
-    tag: data.data?.type || 'default',
-    data: data.data || {},
-    requireInteraction: data.data?.type === 'call',
-    actions: data.data?.type === 'call' ? [
+    tag: payload.data?.type || 'default',
+    data: payload.data || {},
+    requireInteraction: payload.data?.type === 'call',
+    actions: payload.data?.type === 'call' ? [
       { action: 'accept', title: 'Accept' },
       { action: 'decline', title: 'Decline' }
     ] : []

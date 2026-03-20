@@ -1,5 +1,6 @@
 import { Message } from '@/types';
 import { formatTimestamp } from '@/utils/formatters';
+import { FileText, Video as VideoIcon, Music } from 'lucide-react';
 
 interface MessageListProps {
   messages: Message[];
@@ -66,9 +67,77 @@ export function MessageList({ messages, currentUserId }: MessageListProps) {
                     : 'bg-white text-gray-900 rounded-bl-md shadow-sm'
                 }`}
               >
-                <p className="text-sm">
-                  {message.content || (message.contentEncrypted ? '[Encrypted message]' : '')}
-                </p>
+                {message.type === 'file' && message.fileData ? (
+                  message.fileData.downloadUrl && message.fileData.mimeType?.startsWith('image/') ? (
+                    <div className="w-full">
+                      <img
+                        src={message.fileData.downloadUrl}
+                        alt={message.fileData.name}
+                        className="w-full max-h-80 rounded-xl object-cover"
+                        loading="lazy"
+                      />
+                      <div className={`mt-2 flex items-center justify-between text-xs ${isOwn ? 'text-blue-100' : 'text-gray-500'}`}>
+                        <span className="truncate">{message.fileData.name}</span>
+                        <span className="ml-2 whitespace-nowrap">
+                          {(message.fileData.size / 1024 / 1024).toFixed(2)} MB
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      {message.fileData.downloadUrl && message.fileData.mimeType?.startsWith('video/') && (
+                        <video
+                          src={message.fileData.downloadUrl}
+                          controls
+                          className="max-h-56 w-full rounded-lg bg-black"
+                        />
+                      )}
+                      {message.fileData.downloadUrl && message.fileData.mimeType?.startsWith('audio/') && (
+                        <audio controls className="w-full">
+                          <source src={message.fileData.downloadUrl} />
+                        </audio>
+                      )}
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                          isOwn ? 'bg-blue-500/40' : 'bg-gray-100'
+                        }`}>
+                          {message.fileData.mimeType?.startsWith('video/') ? (
+                            <VideoIcon className={`w-5 h-5 ${isOwn ? 'text-white' : 'text-purple-500'}`} />
+                          ) : message.fileData.mimeType?.startsWith('audio/') ? (
+                            <Music className={`w-5 h-5 ${isOwn ? 'text-white' : 'text-green-500'}`} />
+                          ) : (
+                            <FileText className={`w-5 h-5 ${isOwn ? 'text-white' : 'text-orange-500'}`} />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className={`text-sm font-medium truncate ${isOwn ? 'text-white' : 'text-gray-900'}`}>
+                            {message.fileData.name}
+                          </p>
+                          <p className={`text-xs ${isOwn ? 'text-blue-100' : 'text-gray-500'}`}>
+                            {(message.fileData.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                          {message.fileData.downloadUrl ? (
+                            <a
+                              href={message.fileData.downloadUrl}
+                              download={message.fileData.name}
+                              className={`text-xs underline ${isOwn ? 'text-white' : 'text-blue-600'}`}
+                            >
+                              Download
+                            </a>
+                          ) : (
+                            <span className={`text-xs ${isOwn ? 'text-blue-100' : 'text-gray-400'}`}>
+                              Waiting for file...
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                ) : (
+                  <p className="text-sm break-words whitespace-pre-wrap">
+                    {message.content || (message.contentEncrypted ? '[Encrypted message]' : '')}
+                  </p>
+                )}
                 
                 <div className={`flex items-center gap-1 mt-1 ${
                   isOwn ? 'justify-end' : 'justify-start'

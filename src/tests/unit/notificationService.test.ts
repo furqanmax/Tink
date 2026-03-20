@@ -103,7 +103,7 @@ describe('notificationService', () => {
   });
 
   it('deduplicates repeated foreground message notifications', () => {
-    const showSpy = vi.spyOn(notificationService, 'showNotification').mockImplementation(() => {});
+    const showSpy = vi.spyOn(notificationService, 'showNotification').mockImplementation(async () => {});
 
     const payload = {
       notification: { title: 'Message from Alice', body: 'Hello' },
@@ -121,7 +121,7 @@ describe('notificationService', () => {
   });
 
   it('normalizes friend request notification type', () => {
-    const showSpy = vi.spyOn(notificationService, 'showNotification').mockImplementation(() => {});
+    const showSpy = vi.spyOn(notificationService, 'showNotification').mockImplementation(async () => {});
 
     (notificationService as any).handleForegroundMessage({
       notification: { title: 'New Friend Request', body: 'Bob sent a request' },
@@ -136,7 +136,7 @@ describe('notificationService', () => {
   });
 
   it('does not dispatch incoming call state when required call payload is incomplete', () => {
-    const showSpy = vi.spyOn(notificationService, 'showNotification').mockImplementation(() => {});
+    const showSpy = vi.spyOn(notificationService, 'showNotification').mockImplementation(async () => {});
 
     (notificationService as any).handleForegroundMessage({
       notification: { title: 'Incoming Call', body: 'Alice is calling' },
@@ -152,7 +152,7 @@ describe('notificationService', () => {
   });
 
   it('dispatches incoming call state when call payload is complete', () => {
-    const showSpy = vi.spyOn(notificationService, 'showNotification').mockImplementation(() => {});
+    const showSpy = vi.spyOn(notificationService, 'showNotification').mockImplementation(async () => {});
 
     (notificationService as any).handleForegroundMessage({
       notification: { title: 'Incoming Call', body: 'Alice is calling' },

@@ -114,7 +114,7 @@ export function UserSearch({ onSelectContact, onOpenRequests }: UserSearchProps)
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search users..."
-          className="w-full pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+          className="w-full pl-10 pr-10 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
         />
         {searchQuery && (
           <button
@@ -130,11 +130,11 @@ export function UserSearch({ onSelectContact, onOpenRequests }: UserSearchProps)
 
       {/* Search Results Dropdown */}
       {showResults && searchResults.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 max-h-64 overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-800 py-2 z-50 max-h-64 overflow-y-auto">
           {searchResults.map((result) => (
             <div
               key={result.uid}
-              className="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left"
+              className="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
             >
               <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
                 {result.photoURL ? (
@@ -150,10 +150,10 @@ export function UserSearch({ onSelectContact, onOpenRequests }: UserSearchProps)
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-gray-900 truncate">
+                <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
                   {result.displayName || 'Unknown User'}
                 </p>
-                <p className="text-sm text-gray-500 truncate">{result.email}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{result.email}</p>
               </div>
 
               {userProfile?.blockedUsers?.includes(result.uid) ? (
@@ -210,14 +210,14 @@ export function UserSearch({ onSelectContact, onOpenRequests }: UserSearchProps)
 
       {/* No Results */}
       {showResults && searchQuery && !loading && searchResults.length === 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-4 z-50">
-          <p className="text-center text-gray-500 text-sm">No users found</p>
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-800 py-4 z-50">
+          <p className="text-center text-gray-500 dark:text-gray-400 text-sm">No users found</p>
         </div>
       )}
 
       {/* Loading State */}
       {loading && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-4 z-50">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-800 py-4 z-50">
           <div className="flex justify-center">
             <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
           </div>

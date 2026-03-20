@@ -65,6 +65,15 @@ export async function requestFCMToken(): Promise<string | null> {
     let serviceWorkerRegistration: ServiceWorkerRegistration | undefined;
     if ('serviceWorker' in navigator) {
       serviceWorkerRegistration = await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.ready;
+      
+      // Inject Firebase config into service worker for background message handling
+      if (serviceWorkerRegistration.active) {
+        serviceWorkerRegistration.active.postMessage({
+          type: 'INIT_FIREBASE',
+          config: firebaseConfig,
+        });
+      }
     }
     
     const token = await getToken(messagingInstance, {

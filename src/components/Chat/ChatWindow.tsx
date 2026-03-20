@@ -296,13 +296,13 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
   if (!contact) {
     return (
       <div className="h-full flex items-center justify-center">
-        <p className="text-gray-500">Contact not found</p>
+        <p className="text-gray-500 dark:text-gray-400">Contact not found</p>
       </div>
     );
   }
 
   return (
-    <div className="h-full min-h-0 flex flex-col bg-white w-full">
+    <div className="h-full min-h-0 flex flex-col bg-white dark:bg-gray-900 w-full">
       {/* File Picker Modal */}
       {showFilePicker && (
         <FilePicker
@@ -312,13 +312,13 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between px-3 sm:px-4 py-3 border-b border-gray-200 bg-white">
+      <div className="flex items-center justify-between px-3 sm:px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
         <div className="flex items-center gap-3">
           <button
             onClick={onClose}
-            className="lg:hidden p-2 -ml-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="lg:hidden p-2 -ml-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
           >
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
+            <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </button>
           
           <div className="relative">
@@ -347,10 +347,10 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
           </div>
           
           <div className="min-w-0">
-            <h2 className="font-semibold text-gray-900 truncate">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100 truncate">
               {contact.displayName || 'Unknown User'}
             </h2>
-            <p className="text-sm text-gray-500 truncate">
+            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
               {contact.status === 'online' 
                 ? 'Online' 
                 : contact.status === 'busy'
@@ -363,37 +363,37 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
         <div className="flex items-center gap-1 sm:gap-2 relative">
           <button 
             onClick={handleAudioCall}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
             title="Voice call"
           >
-            <Phone className="w-5 h-5 text-gray-600" />
+            <Phone className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </button>
           <button 
             onClick={handleVideoCall}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
             title="Video call"
           >
-            <Video className="w-5 h-5 text-gray-600" />
+            <Video className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </button>
           <button 
             onClick={() => setShowFilePicker(true)}
-            className="hidden sm:inline-flex p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="hidden sm:inline-flex p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
             title="Send file"
           >
-            <Paperclip className="w-5 h-5 text-gray-600" />
+            <Paperclip className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </button>
           <button
             onClick={() => setShowActionsMenu((prev) => !prev)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
           >
-            <MoreVertical className="w-5 h-5 text-gray-600" />
+            <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </button>
           {showActionsMenu && (
-            <div className="absolute right-0 top-12 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-30">
+            <div className="absolute right-0 top-12 w-44 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg py-1 z-30">
               {userProfile?.friends?.includes(contactId) && (
                 <button
                   onClick={handleUnfriend}
-                  className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  className="w-full px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
                 >
                   <UserMinus className="w-4 h-4" />
                   Unfriend
@@ -401,7 +401,7 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
               )}
               <button
                 onClick={handleBlock}
-                className="w-full px-3 py-2 text-sm text-left text-red-600 hover:bg-red-50 flex items-center gap-2"
+                className="w-full px-3 py-2 text-sm text-left text-red-600 hover:bg-red-50 dark:hover:bg-red-950 flex items-center gap-2"
               >
                 <ShieldX className="w-4 h-4" />
                 Block
@@ -412,19 +412,19 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
       </div>
 
       {actionError && (
-        <div className="px-4 py-2 border-b border-red-100 bg-red-50">
+        <div className="px-4 py-2 border-b border-red-100 dark:border-red-900 bg-red-50 dark:bg-red-950">
           <p className="text-sm text-red-700">{actionError}</p>
         </div>
       )}
 
       {/* Messages */}
-      <div className="flex-1 min-h-0 overflow-y-auto bg-gray-50 overscroll-contain">
+      <div className="flex-1 min-h-0 overflow-y-auto bg-gray-50 dark:bg-gray-950 overscroll-contain">
         <MessageList messages={messages} currentUserId={user?.uid || ''} />
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}
-      <div className="bg-white sticky bottom-0 left-0 right-0">
+      <div className="bg-white dark:bg-gray-900 sticky bottom-0 left-0 right-0">
         <MessageInput onSendMessage={handleSendMessage} />
       </div>
     </div>

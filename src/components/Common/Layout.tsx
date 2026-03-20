@@ -28,7 +28,7 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div
-      className="min-h-screen min-h-[100dvh] bg-gray-100"
+      className="min-h-screen min-h-[100dvh] bg-gray-100 dark:bg-gray-950"
       style={{ minHeight: 'var(--app-height, 100dvh)' }}
     >
       <main className="h-full flex flex-col">

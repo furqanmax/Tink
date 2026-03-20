@@ -91,10 +91,10 @@ export function ContactsList({ onSelectContact, selectedContact }: ContactsListP
       <div className="p-4 space-y-3">
         {[1, 2, 3].map((i) => (
           <div key={i} className="flex items-center gap-3 p-3 rounded-lg animate-pulse">
-            <div className="w-12 h-12 bg-gray-200 rounded-full" />
+            <div className="w-12 h-12 bg-gray-200 dark:bg-gray-800 rounded-full" />
             <div className="flex-1 space-y-2">
-              <div className="h-4 bg-gray-200 rounded w-24" />
-              <div className="h-3 bg-gray-200 rounded w-32" />
+              <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-24" />
+              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-32" />
             </div>
           </div>
         ))}
@@ -105,7 +105,7 @@ export function ContactsList({ onSelectContact, selectedContact }: ContactsListP
   if (contacts.length === 0) {
     return (
       <div className="p-8 text-center">
-        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+        <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
           <svg
             className="w-8 h-8 text-gray-400"
             fill="none"
@@ -120,7 +120,7 @@ export function ContactsList({ onSelectContact, selectedContact }: ContactsListP
             />
           </svg>
         </div>
-        <p className="text-gray-500 text-sm">
+        <p className="text-gray-500 dark:text-gray-400 text-sm">
           No contacts yet. Search for users to add friends.
         </p>
       </div>
@@ -128,13 +128,13 @@ export function ContactsList({ onSelectContact, selectedContact }: ContactsListP
   }
 
   return (
-    <div className="divide-y divide-gray-100">
+    <div className="divide-y divide-gray-100 dark:divide-gray-800">
       {contacts.map((contact) => (
         <button
           key={contact.uid}
           onClick={() => onSelectContact(contact.uid)}
-          className={`w-full flex items-center gap-3 px-3 py-3 sm:p-4 hover:bg-gray-50 transition-colors text-left ${
-            selectedContact === contact.uid ? 'bg-blue-50 hover:bg-blue-50' : ''
+          className={`w-full flex items-center gap-3 px-3 py-3 sm:p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left ${
+            selectedContact === contact.uid ? 'bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-50 dark:hover:bg-blue-950/40' : ''
           }`}
         >
           <div className="relative">
@@ -164,16 +164,16 @@ export function ContactsList({ onSelectContact, selectedContact }: ContactsListP
           
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
-              <p className="font-medium text-gray-900 truncate">
+              <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
                 {contact.displayName || 'Unknown User'}
               </p>
               {contact.conversation?.lastMessageTime && (
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-gray-400 dark:text-gray-500">
                   {formatDistanceToNow(contact.conversation.lastMessageTime)}
                 </span>
               )}
             </div>
-            <p className="text-sm text-gray-500 truncate">
+            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
               {contact.conversation?.lastMessage || contact.email || 'No messages yet'}
             </p>
           </div>

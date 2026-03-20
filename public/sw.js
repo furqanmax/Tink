@@ -1,3 +1,6 @@
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
+
 const CACHE_VERSION = 'v1';
 const CACHE_NAME = `tink-${CACHE_VERSION}`;
 
@@ -160,5 +163,47 @@ self.addEventListener('sync', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
+  }
+});
+
+// Initialize Firebase Messaging for background notifications
+// Firebase config is injected at runtime when the app registers the SW
+let messagingInstance = null;
+
+self.addEventListener('message', (event) => {
+  if (event.data.type === 'INIT_FIREBASE' && event.data.config) {
+    try {
+      if (!firebase.apps.length) {
+        firebase.initializeApp(event.data.config);
+      }
+      messagingInstance = firebase.messaging();
+      
+      // Handle background messages from FCM
+      messagingInstance.onBackgroundMessage((payload) => {
+        const notification = payload.notification || {};
+        const data = payload.data || {};
+        const type = data.type || 'system';
+        
+        const title = notification.title || 'Tink';
+        const options = {
+          body: notification.body || 'New notification',
+          icon: '/icon.svg',
+          badge: '/icon.svg',
+          tag: data.tag || data.messageId || data.callId || type,
+          data: data,
+          requireInteraction: type === 'call',
+          renotify: type === 'call',
+          actions: type === 'call' ? [
+            { action: 'accept', title: 'Accept' },
+            { action: 'decline', title: 'Decline' }
+          ] : []
+        }
+        ;
+        
+        return self.registration.showNotification(title, options);
+      });
+    } catch (error) {
+      console.warn('Failed to initialize Firebase in SW:', error);
+    }
   }
 });

@@ -81,20 +81,20 @@ export function FilePicker({ onFileSelect, onCancel, maxFileSize = 30 * 1024 * 1
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-bold text-gray-900">Send File</h3>
+          <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Send File</h3>
           <button
             onClick={onCancel}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="mb-4 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 rounded-lg">
             <p className="text-red-600 text-sm">{error}</p>
           </div>
         )}
@@ -109,16 +109,16 @@ export function FilePicker({ onFileSelect, onCancel, maxFileSize = 30 * 1024 * 1
             className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
               isDragging
                 ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
             }`}
           >
             <Upload className={`w-12 h-12 mx-auto mb-4 transition-colors ${
               isDragging ? 'text-blue-500' : 'text-gray-400'
             }`} />
-            <p className="text-gray-700 font-medium mb-2">
+            <p className="text-gray-700 dark:text-gray-200 font-medium mb-2">
               Drop file here or click to browse
             </p>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               Max file size: {(maxFileSize / 1024 / 1024).toFixed(0)}MB
             </p>
             <input
@@ -131,24 +131,24 @@ export function FilePicker({ onFileSelect, onCancel, maxFileSize = 30 * 1024 * 1
         ) : (
           /* Selected File Preview */
           <div className="space-y-4">
-            <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+            <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
               {getFileIcon(selectedFile)}
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-gray-900 truncate">{selectedFile.name}</p>
-                <p className="text-sm text-gray-500">{formatFileSize(selectedFile.size)}</p>
+                <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{selectedFile.name}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{formatFileSize(selectedFile.size)}</p>
               </div>
               <button
                 onClick={() => setSelectedFile(null)}
-                className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+                className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
               >
-                <X className="w-4 h-4 text-gray-500" />
+                <X className="w-4 h-4 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
 
             <div className="flex gap-3">
               <button
                 onClick={onCancel}
-                className="flex-1 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                className="flex-1 px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
               >
                 Cancel
               </button>
@@ -163,13 +163,13 @@ export function FilePicker({ onFileSelect, onCancel, maxFileSize = 30 * 1024 * 1
         )}
 
         {/* Supported File Types */}
-        <div className="mt-6 pt-4 border-t border-gray-200">
-          <p className="text-xs text-gray-500 mb-2">Supported files:</p>
+        <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-800">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Supported files:</p>
           <div className="flex flex-wrap gap-2">
             {['Images', 'Videos', 'Audio', 'Documents', 'PDFs'].map((type) => (
               <span
                 key={type}
-                className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full"
+                className="px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-xs rounded-full"
               >
                 {type}
               </span>

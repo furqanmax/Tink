@@ -61,7 +61,7 @@ export function ChatPage() {
 
   return (
     <div
-      className="bg-gray-100 flex flex-col overflow-hidden"
+      className="bg-gray-100 dark:bg-gray-950 flex flex-col overflow-hidden"
       style={{ height: 'var(--app-height, 100dvh)' }}
     >
       {/* Incoming Call Notification */}
@@ -124,12 +124,12 @@ export function ChatPage() {
         <div className="flex overflow-hidden h-full">
           {/* Sidebar */}
           <div
-            className={`w-full lg:w-80 bg-white border-r border-gray-200 flex-col min-w-0 ${
+            className={`w-full lg:w-80 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex-col min-w-0 ${
               selectedContact ? 'hidden lg:flex' : 'flex'
             }`}
           >
             {/* Tabs */}
-            <div className="flex border-b border-gray-200">
+            <div className="flex border-b border-gray-200 dark:border-gray-800">
               <button
                 onClick={() => setActiveTab('chats')}
                 className={`flex-1 py-3 text-sm font-medium transition-colors ${
@@ -153,7 +153,7 @@ export function ChatPage() {
             </div>
 
             {/* Search */}
-            <div className="p-4 border-b border-gray-200">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-800">
               <UserSearch
                 onSelectContact={setSelectedContact}
                 onOpenRequests={() => setShowFriendRequests(true)}
@@ -183,7 +183,7 @@ export function ChatPage() {
 
           {/* Main Chat Area */}
           <div
-            className={`flex-1 bg-gray-50 min-w-0 ${
+            className={`flex-1 bg-gray-50 dark:bg-gray-950 min-w-0 ${
               selectedContact ? 'flex' : 'hidden lg:flex'
             }`}
           >
@@ -211,10 +211,10 @@ export function ChatPage() {
                       />
                     </svg>
                   </div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
                     Welcome to Tink
                   </h2>
-                  <p className="text-gray-500 max-w-sm mb-6">
+                  <p className="text-gray-500 dark:text-gray-400 max-w-sm mb-6">
                     Select a contact from the sidebar or search for users to start a chat
                   </p>
                   

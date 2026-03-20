@@ -16,12 +16,78 @@ export interface Notification {
   requireInteraction?: boolean;
 }
 
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  Notification?: {
+    new(title: string, options?: NotificationOptions): Notification;
+    permission: NotificationPermission;
+    requestPermission(): Promise<NotificationPermission>;
+  };
+  }
+}
+
+// Firebase config for service worker initialization
+const getFirebaseConfig = () => ({
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+});
+
 class NotificationService {
   private initialized = false;
   private readonly dedupeTtlMs = 10_000;
   private readonly seenNotificationKeys = new Map<string, number>();
   private boundServiceWorkerListener = false;
   private webPushRegistered = false;
+  private serviceWorkerReady: Promise<ServiceWorkerRegistration | null> | null = null;
+
+  /**
+   * Check if running on iOS Safari
+   */
+  private isIOSSafari(): boolean {
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent;
+    const isIOS = /iPad|iPhone|iPod/.test(ua) || 
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua);
+    return isIOS && isSafari;
+  }
+
+  /**
+   * Check if running on Linux desktop browsers
+   */
+  private isLinuxDesktop(): boolean {
+    if (typeof navigator === 'undefined') return false;
+    return /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+  }
+
+  /**
+   * Check if the app is running as a PWA (standalone mode)
+   * This is important for iOS Safari where notifications only work in PWA mode
+   */
+  private isPWA(): boolean {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(display-mode: standalone)').matches ||
+           (window.navigator as any).standalone === true;
+  }
+
+  /**
+   * Check if notifications are supported
+   */
+  private isNotificationSupported(): boolean {
+    return typeof window !== 'undefined' && 'Notification' in window;
+  }
+
+  /**
+   * Check if service worker is supported
+   */
+  private isServiceWorkerSupported(): boolean {
+    return typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
+  }
 
   private base64UrlToUint8Array(base64UrlString: string): Uint8Array {
     const padding = '='.repeat((4 - (base64UrlString.length % 4)) % 4);
@@ -134,30 +200,98 @@ class NotificationService {
   }
 
   /**
+   * Get service worker registration with Firebase config injection
+   */
+  private async getServiceWorkerRegistration(): Promise<ServiceWorkerRegistration | null> {
+    if (!this.isServiceWorkerSupported()) return null;
+    
+    if (this.serviceWorkerReady) {
+      return this.serviceWorkerReady;
+    }
+
+    this.serviceWorkerReady = (async () => {
+      try {
+        const registration = await navigator.serviceWorker.register('/sw.js');
+        await navigator.serviceWorker.ready;
+        
+        // Inject Firebase config into service worker for FCM background handling
+        const config = getFirebaseConfig();
+        registration.active?.postMessage({
+          type: 'INIT_FIREBASE',
+          config,
+        });
+        
+        return registration;
+      } catch (error) {
+        console.warn('Service worker registration failed:', error);
+        return null;
+      }
+    })();
+
+    return this.serviceWorkerReady;
+  }
+
+  /**
+   * Request notification permission with iOS Safari workaround
+   * iOS Safari requires permission request from user gesture
+   */
+  async requestPermission(): Promise<boolean> {
+    if (!this.isNotificationSupported()) {
+      console.warn('This browser does not support notifications');
+      return false;
+    }
+
+    const permission = Notification.permission;
+    
+    if (permission === 'granted') {
+      return true;
+    }
+    
+    if (permission === 'denied') {
+      console.warn('Notification permission previously denied');
+      return false;
+    }
+
+    try {
+      // iOS Safari and some browsers require this to be called from user gesture
+      // The result is 'granted', 'denied', or 'default'
+      const result = await Notification.requestPermission();
+      return result === 'granted';
+    } catch (error) {
+      console.error('Failed to request notification permission:', error);
+      return false;
+    }
+  }
+
+  /**
    * Initialize notifications
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    if (typeof window === 'undefined' || !('Notification' in window)) {
+    if (!this.isNotificationSupported()) {
       console.warn('This browser does not support notifications');
       return;
     }
 
     try {
-      // Request permission
-      const permission = Notification.permission;
+      // Get service worker registration first (needed for FCM and notifications)
+      await this.getServiceWorkerRegistration();
       
-      if (permission === 'default') {
-        const result = await Notification.requestPermission();
-        if (result !== 'granted') {
-          console.warn('Notification permission denied');
-          return;
+      // Request permission - on iOS Safari this may need to be triggered from user gesture
+      const hasPermission = await this.requestPermission();
+      if (!hasPermission) {
+        // On iOS Safari, permission request may fail silently without user gesture
+        // We'll still initialize FCM/WebPush so it can work once permission is granted
+        if (this.isIOSSafari() && !this.isPWA()) {
+          console.info('iOS Safari: Notification permission requires user gesture. Add "Add to Home Screen" for PWA notifications, or call requestPermission() from a button click.');
         }
-      } else if (permission === 'denied') {
-        console.warn('Notification permission previously denied');
+        if (this.isLinuxDesktop()) {
+          console.info('Linux desktop: Ensure browser has notification permissions in system settings.');
+        }
         return;
       }
 
+      // Initialize Firebase Cloud Messaging
       const messaging = await getMessagingIfSupported();
       if (messaging) {
         const token = await requestFCMToken();
@@ -174,6 +308,7 @@ class NotificationService {
         });
       }
 
+      // Register Web Push for browsers that don't support FCM (Linux desktop, etc.)
       await this.registerWebPushSubscription();
       this.bindServiceWorkerMessages();
 
@@ -208,7 +343,7 @@ class NotificationService {
     }
 
     // Show local notification
-    this.showNotification({
+    void this.showNotification({
       type,
       title: notification?.title || 'New Notification',
       body: notification?.body || '',
@@ -221,9 +356,9 @@ class NotificationService {
   }
 
   /**
-   * Show local notification
+   * Show local notification - uses service worker when available for better cross-browser support
    */
-  showNotification(notification: Notification): void {
+  async showNotification(notification: Notification): Promise<void> {
     if (Notification.permission !== 'granted') {
       return;
     }
@@ -239,12 +374,32 @@ class NotificationService {
         { action: 'accept', title: 'Accept' },
         { action: 'decline', title: 'Decline' }
       ] : undefined,
+      // Silent property for quieter notifications
+      silent: notification.type === 'system',
     };
 
     try {
+      // Prefer service worker notifications for better cross-browser support
+      // This works on iOS Safari (PWA mode), Linux desktop browsers, and all modern browsers
+      if (this.isServiceWorkerSupported()) {
+        const registration = await this.getServiceWorkerRegistration();
+        if (registration) {
+          await registration.showNotification(notification.title, options);
+          return;
+        }
+      }
+      
+      // Fallback to direct Notification API for browsers without SW support
       new Notification(notification.title, options);
     } catch (error) {
       console.error('Failed to show notification:', error);
+      
+      // Last resort fallback - try direct Notification constructor
+      try {
+        new Notification(notification.title, options);
+      } catch (fallbackError) {
+        console.error('All notification methods failed:', fallbackError);
+      }
     }
   }
 

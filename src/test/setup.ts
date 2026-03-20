@@ -12,7 +12,24 @@ if (!('Notification' in globalThis)) {
 
 if (!('AudioContext' in globalThis)) {
   (globalThis as any).AudioContext = class AudioContext {
+    currentTime = 0;
     close() { return Promise.resolve(); }
+    createOscillator() {
+      return {
+        type: 'sine',
+        frequency: { value: 0 },
+        connect() {},
+        start() {},
+        stop() {},
+        onended: null as null | (() => void),
+      };
+    }
+    createGain() {
+      return {
+        gain: { value: 0 },
+        connect() {},
+      };
+    }
     createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
     createMediaStreamDestination() { return { stream: new MediaStream(), connect() {}, disconnect() {} }; }
     createBiquadFilter() { return { type: 'lowpass', frequency: { value: 0 }, connect() {}, disconnect() {} }; }

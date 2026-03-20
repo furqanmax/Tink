@@ -10,7 +10,6 @@ import { FriendRequestsPanel } from '@/components/Contacts/FriendRequestsPanel';
 import { IncomingCallNotification } from '@/components/Call/IncomingCallNotification';
 import { CallWindow } from '@/components/Call/CallWindow';
 import { AdminDashboard } from '@/components/Admin/AdminDashboard';
-import { requestFCMToken } from '@/config/firebase';
 import { notificationService } from '@/services/notification';
 import { UserPlus, Shield } from 'lucide-react';
 
@@ -26,15 +25,7 @@ export function ChatPage() {
   const [showCallWindow, setShowCallWindow] = useState(false);
 
   useEffect(() => {
-    // Request notification permission on mount
-    if ('Notification' in window) {
-      Notification.requestPermission().then((permission) => {
-        if (permission === 'granted') {
-          requestFCMToken();
-          notificationService.initialize();
-        }
-      });
-    }
+    void notificationService.initialize();
 
     // Load friend requests
     if (user) {

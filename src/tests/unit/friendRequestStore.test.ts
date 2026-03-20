@@ -24,6 +24,7 @@ const hoisted = vi.hoisted(() => ({
   mockArrayRemove: vi.fn((value: string) => ({ __arrayRemove: value })),
   mockSetDoc: vi.fn(),
   mockGetDoc: vi.fn(),
+  notifyFriendRequest: vi.fn(),
 }));
 
 vi.mock('@/config/firebase', () => ({
@@ -33,7 +34,7 @@ vi.mock('@/config/firebase', () => ({
 
 vi.mock('@/services/notification', () => ({
   notificationService: {
-    notifyFriendRequest: vi.fn(),
+    notifyFriendRequest: hoisted.notifyFriendRequest,
   },
 }));
 
@@ -115,6 +116,27 @@ describe('friendRequestStore', () => {
       useFriendRequestStore.getState().sendFriendRequest('user-b', 'Bob')
     ).rejects.toThrow('already sent you a request');
     expect(hoisted.mockAddDoc).not.toHaveBeenCalled();
+  });
+
+  it('sends a friend request and emits a local notification payload', async () => {
+    hoisted.mockGetDoc
+      .mockResolvedValueOnce(mockDocSnapshot({ friends: [], blockedUsers: [] })) // current user
+      .mockResolvedValueOnce(mockDocSnapshot({ blockedUsers: [] })); // recipient
+    hoisted.mockGetDocs
+      .mockResolvedValueOnce(mockQuerySnapshot([])) // sent pending
+      .mockResolvedValueOnce(mockQuerySnapshot([])); // received pending
+    hoisted.mockAddDoc.mockResolvedValue({ id: 'request-123' });
+
+    await useFriendRequestStore.getState().sendFriendRequest('user-b', 'Bob');
+
+    expect(hoisted.mockAddDoc).toHaveBeenCalledTimes(1);
+    expect(hoisted.notifyFriendRequest).toHaveBeenCalledWith(
+      'Alice',
+      expect.objectContaining({
+        senderId: 'user-a',
+        type: 'friend_request',
+      })
+    );
   });
 
   it('rejects accepting a request when current user is not recipient', async () => {

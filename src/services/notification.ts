@@ -18,13 +18,127 @@ export interface Notification {
 
 class NotificationService {
   private initialized = false;
+  private readonly dedupeTtlMs = 10_000;
+  private readonly seenNotificationKeys = new Map<string, number>();
+  private boundServiceWorkerListener = false;
+  private webPushRegistered = false;
+
+  private base64UrlToUint8Array(base64UrlString: string): Uint8Array {
+    const padding = '='.repeat((4 - (base64UrlString.length % 4)) % 4);
+    const normalized = (base64UrlString + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = window.atob(normalized);
+    const bytes = new Uint8Array(decoded.length);
+    for (let index = 0; index < decoded.length; index += 1) {
+      bytes[index] = decoded.charCodeAt(index);
+    }
+    return bytes;
+  }
+
+  private async sha256Hex(input: string): Promise<string> {
+    if (!window.crypto?.subtle) {
+      return window.btoa(input).replace(/[^a-zA-Z0-9]/g, '').slice(0, 32);
+    }
+    const encoded = new TextEncoder().encode(input);
+    const digest = await window.crypto.subtle.digest('SHA-256', encoded);
+    return Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  private async registerWebPushSubscription(): Promise<void> {
+    if (this.webPushRegistered || !auth.currentUser) return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+    const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY as string | undefined;
+    if (!vapidKey) {
+      console.warn('Web push VAPID key not configured');
+      return;
+    }
+
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: this.base64UrlToUint8Array(vapidKey) as BufferSource,
+        });
+      }
+
+      const serialized = subscription.toJSON();
+      if (!serialized.endpoint || !serialized.keys?.auth || !serialized.keys?.p256dh) {
+        return;
+      }
+
+      const subscriptionId = await this.sha256Hex(serialized.endpoint);
+      await updateDoc(doc(firestore, 'users', auth.currentUser.uid), {
+        [`webPushSubscriptions.${subscriptionId}`]: {
+          endpoint: serialized.endpoint,
+          keys: serialized.keys,
+          expirationTime: serialized.expirationTime ?? null,
+          subscriptionId,
+          userAgent: navigator.userAgent,
+          updatedAt: Date.now(),
+        },
+        webPushUpdatedAt: serverTimestamp(),
+      });
+
+      this.webPushRegistered = true;
+    } catch (error) {
+      console.warn('Unable to register Web Push subscription:', error);
+    }
+  }
+
+  private normalizeType(type?: string): NotificationType {
+    if (type === 'call') return 'call';
+    if (type === 'message') return 'message';
+    if (type === 'friend_request' || type === 'request' || type === 'invite') return 'request';
+    return 'system';
+  }
+
+  private getNotificationKey(data: Record<string, string>, type: NotificationType): string {
+    return data.callId || data.messageId || data.requestId || data.tag || `${type}:${data.senderId || ''}:${data.conversationId || ''}`;
+  }
+
+  private shouldSkipDuplicate(key: string): boolean {
+    if (!key) return false;
+    const now = Date.now();
+    for (const [storedKey, timestamp] of this.seenNotificationKeys.entries()) {
+      if (now - timestamp > this.dedupeTtlMs) {
+        this.seenNotificationKeys.delete(storedKey);
+      }
+    }
+    if (this.seenNotificationKeys.has(key)) return true;
+    this.seenNotificationKeys.set(key, now);
+    return false;
+  }
+
+  private bindServiceWorkerMessages(): void {
+    if (this.boundServiceWorkerListener || !('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data?.type !== 'NOTIFICATION_CLICK') return;
+      const data = event.data?.data || {};
+      const type = this.normalizeType(data.type);
+      if (type === 'call') {
+        const callStore = useCallStore.getState();
+        if (event.data?.action === 'decline' && callStore.incomingCallData?.callId === data.callId) {
+          void callStore.rejectIncomingCall();
+        }
+      }
+      window.focus();
+      if (window.location.pathname !== '/chat') {
+        window.location.href = '/chat';
+      }
+    });
+    this.boundServiceWorkerListener = true;
+  }
 
   /**
    * Initialize notifications
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    if (!('Notification' in window)) {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
       console.warn('This browser does not support notifications');
       return;
     }
@@ -60,6 +174,9 @@ class NotificationService {
         });
       }
 
+      await this.registerWebPushSubscription();
+      this.bindServiceWorkerMessages();
+
       this.initialized = true;
     } catch (error) {
       console.error('Failed to initialize notifications:', error);
@@ -71,15 +188,20 @@ class NotificationService {
    */
   private handleForegroundMessage(payload: any): void {
     const notification = payload.notification;
-    const data = payload.data || {};
+    const data = (payload.data || {}) as Record<string, string>;
+    const type = this.normalizeType(data.type);
+    const dedupeKey = this.getNotificationKey(data, type);
+    if (this.shouldSkipDuplicate(dedupeKey)) {
+      return;
+    }
 
     // Handle call notifications specially
-    if (data.type === 'call') {
+    if (type === 'call' && data.callId && data.callerId && data.roomName) {
       const callStore = useCallStore.getState();
       void callStore.handleIncomingCall({
         callId: data.callId,
         callerId: data.callerId,
-        callerName: data.callerName,
+        callerName: data.callerName || 'Unknown',
         roomName: data.roomName,
         isVideo: data.isVideo !== '0',
       });
@@ -87,14 +209,15 @@ class NotificationService {
 
     // Show local notification
     this.showNotification({
-      type: data.type || 'system',
+      type,
       title: notification?.title || 'New Notification',
       body: notification?.body || '',
       data: data,
+      tag: data.tag || dedupeKey,
     });
 
     // Play sound
-    this.playSound(data.type || 'system');
+    this.playSound(type);
   }
 
   /**
@@ -129,20 +252,29 @@ class NotificationService {
    * Play notification sound
    */
   private playSound(type: NotificationType): void {
-    // Map notification types to sound files
-    const soundMap: Record<NotificationType, string> = {
-      call: '/sounds/incoming-call.mp3',
-      message: '/sounds/message.mp3',
-      request: '/sounds/notification.mp3',
-      system: '/sounds/notification.mp3',
-    };
+    const contextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!contextClass) return;
+    try {
+      const context = new contextClass();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
 
-    const audio = new Audio(soundMap[type]);
-    audio.volume = 0.5;
-    audio.play().catch((e) => {
-      // Autoplay might be blocked, ignore error
-      console.log('Could not play notification sound:', e);
-    });
+      oscillator.type = 'sine';
+      oscillator.frequency.value = type === 'call' ? 720 : 520;
+      gain.gain.value = type === 'call' ? 0.05 : 0.03;
+
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+
+      oscillator.start();
+      oscillator.stop(context.currentTime + (type === 'call' ? 0.35 : 0.12));
+      oscillator.onended = () => {
+        context.close().catch(() => {});
+      };
+    } catch (error) {
+      // Ignore sound failures. Tray notification is primary signal.
+      console.debug('Notification sound unavailable:', error);
+    }
   }
 
   /**

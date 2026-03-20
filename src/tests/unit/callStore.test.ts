@@ -28,7 +28,8 @@ const hoisted = vi.hoisted(() => {
     return vi.fn();
   });
   const mockServerTimestamp = vi.fn(() => ({ __serverTimestamp: true }));
-  const mockHttpsCallable = vi.fn(() => vi.fn().mockResolvedValue({ data: { success: true } }));
+  const mockSendNotificationCallable = vi.fn().mockResolvedValue({ data: { success: true } });
+  const mockHttpsCallable = vi.fn(() => mockSendNotificationCallable);
 
   const liveKitService = {
     connectToRoom: vi.fn().mockResolvedValue({ remoteParticipants: new Map() }),
@@ -63,6 +64,7 @@ const hoisted = vi.hoisted(() => {
     mockOnSnapshot,
     mockServerTimestamp,
     mockHttpsCallable,
+    mockSendNotificationCallable,
     liveKitService,
     jitsiService,
     getQuerySnapshotHandler: () => querySnapshotHandler,
@@ -138,6 +140,26 @@ describe('callStore', () => {
     expect(hoisted.mockAddDoc).toHaveBeenCalledTimes(1);
     expect(useCallStore.getState().callState).toBe('ringing');
     expect(useCallStore.getState().activeCallId).toBe('call-1');
+  });
+
+  it('sends call notification fallback payload when initiating a call', async () => {
+    hoisted.mockAddDoc.mockResolvedValue({ id: 'call-42' });
+
+    await useCallStore.getState().initiateCall('callee-42', 'Callee Two', false);
+    await flushMicrotasks();
+
+    expect(hoisted.mockHttpsCallable).toHaveBeenCalledWith({ _mock: true }, 'sendNotification');
+    expect(hoisted.mockSendNotificationCallable).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipientId: 'callee-42',
+        type: 'call',
+        data: expect.objectContaining({
+          callId: 'call-42',
+          callerId: 'caller-1',
+          isVideo: '0',
+        }),
+      })
+    );
   });
 
   it('shows incoming ringing call from listener', async () => {

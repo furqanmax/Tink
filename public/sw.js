@@ -96,9 +96,10 @@ self.addEventListener('push', (event) => {
     body: payload.notification?.body || 'New notification',
     icon: '/icon.svg',
     badge: '/icon.svg',
-    tag: payload.data?.type || 'default',
+    tag: payload.data?.tag || payload.data?.callId || payload.data?.messageId || payload.data?.requestId || payload.data?.type || 'default',
     data: payload.data || {},
     requireInteraction: payload.data?.type === 'call',
+    renotify: payload.data?.type === 'call',
     actions: payload.data?.type === 'call' ? [
       { action: 'accept', title: 'Accept' },
       { action: 'decline', title: 'Decline' }
@@ -115,10 +116,15 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const action = event.action;
-  const data = event.notification.data;
+  const data = event.notification.data || {};
+  const targetPath = data.type === 'call'
+    ? '/chat?tab=calls'
+    : data.type === 'friend_request'
+    ? '/chat?tab=requests'
+    : '/chat';
 
   event.waitUntil(
-    self.clients.matchAll({ type: 'window' }).then((clients) => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       // If app is already open, focus it and post message
       if (clients.length > 0) {
         const client = clients[0];
@@ -132,7 +138,7 @@ self.addEventListener('notificationclick', (event) => {
       }
 
       // Otherwise open new window
-      return self.clients.openWindow('/chat');
+      return self.clients.openWindow(targetPath);
     })
   );
 });

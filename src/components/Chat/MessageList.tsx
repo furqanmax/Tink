@@ -1,13 +1,26 @@
 import { Message } from '@/types';
 import { formatTimestamp } from '@/utils/formatters';
-import { FileText, Video as VideoIcon, Music } from 'lucide-react';
+import { FileText, Video as VideoIcon, Music, Reply, Pencil } from 'lucide-react';
 
 interface MessageListProps {
   messages: Message[];
   currentUserId: string;
+  selectionMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelection?: (id: string) => void;
+  onReply?: (message: Message) => void;
+  onEdit?: (message: Message) => void;
 }
 
-export function MessageList({ messages, currentUserId }: MessageListProps) {
+export function MessageList({ 
+  messages, 
+  currentUserId, 
+  selectionMode = false,
+  selectedIds = new Set(),
+  onToggleSelection,
+  onReply,
+  onEdit
+}: MessageListProps) {
   if (messages.length === 0) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -45,9 +58,28 @@ export function MessageList({ messages, currentUserId }: MessageListProps) {
         return (
           <div
             key={message.messageId}
-            className={`flex w-full ${isOwn ? 'justify-end' : 'justify-start'}`}
+            id={`message-${message.messageId}`}
+            className={`flex w-full transition-colors duration-500 ${isOwn ? 'justify-end' : 'justify-start'} ${
+              selectionMode ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800/50' : ''
+            }`}
+            onClick={() => selectionMode && onToggleSelection?.(message.messageId)}
           >
-            <div className={`flex max-w-[85%] sm:max-w-[70%] ${isOwn ? 'flex-row-reverse' : 'flex-row'} gap-2`}>
+            <div className={`flex max-w-[85%] sm:max-w-[70%] ${isOwn ? 'flex-row-reverse' : 'flex-row'} gap-2 items-center`}>
+              {selectionMode && (
+                <div className="flex-shrink-0 px-2">
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                    selectedIds.has(message.messageId)
+                      ? 'bg-blue-600 border-blue-600'
+                      : 'border-gray-300 dark:border-gray-600'
+                  }`}>
+                    {selectedIds.has(message.messageId) && (
+                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+              )}
               {/* Avatar (only show for first message in sequence from other user) */}
               {!isOwn && (
                 <div className={`w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -61,12 +93,75 @@ export function MessageList({ messages, currentUserId }: MessageListProps) {
 
               {/* Message Bubble */}
               <div
-                className={`px-4 py-2.5 rounded-2xl ${
+                className={`group relative px-4 py-2.5 rounded-2xl ${
                   isOwn
-                    ? 'bg-blue-600 text-white rounded-br-md'
+                    ? 'bg-blue-900 text-white rounded-br-md'
                     : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-md shadow-sm'
                 }`}
               >
+                {/* Reply Button (visible on hover) */}
+                {!selectionMode && (
+                  <div className={`absolute top-0 ${isOwn ? '-left-20' : '-right-20'} flex opacity-0 group-hover:opacity-100 transition-opacity`}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onReply?.(message);
+                      }}
+                      className="p-2 text-gray-400 hover:text-blue-500 transition-colors"
+                      title="Reply"
+                    >
+                      <Reply className="w-4 h-4" />
+                    </button>
+                    {isOwn && message.type === 'text' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit?.(message);
+                        }}
+                        className="p-2 text-gray-400 hover:text-green-500 transition-colors"
+                        title="Edit"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Reply Context */}
+                {message.replyTo && (
+                  <div 
+                    className={`mb-2 p-2 rounded-lg text-xs border-l-4 ${
+                      isOwn 
+                        ? 'bg-blue-700/50 border-blue-300 text-blue-100' 
+                        : 'bg-gray-100 dark:bg-gray-700 border-blue-500 text-gray-600 dark:text-gray-300'
+                    } cursor-pointer hover:opacity-80`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const element = document.getElementById(`message-${message.replyTo?.messageId}`);
+                      element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      element?.classList.add('bg-blue-100', 'dark:bg-blue-900/30');
+                      setTimeout(() => {
+                        element?.classList.remove('bg-blue-100', 'dark:bg-blue-900/30');
+                      }, 2000);
+                    }}
+                  >
+                    <p className="font-bold truncate">
+                      {message.replyTo.senderId === currentUserId ? 'You' : message.replyTo.senderName}
+                    </p>
+                    <p className="truncate line-clamp-1">
+                      {message.replyTo.type === 'file' ? `File: ${message.replyTo.content}` : message.replyTo.content}
+                    </p>
+                  </div>
+                )}
+
+                {/* Forwarded Tag */}
+                {message.forwardedFrom && (
+                  <div className="flex items-center gap-1 mb-1 opacity-70 italic text-[10px]">
+                    <Reply className="w-3 h-3 rotate-180" />
+                    <span>Forwarded from {message.forwardedFrom}</span>
+                  </div>
+                )}
+
                 {message.type === 'file' && message.fileData ? (
                   message.fileData.downloadUrl && message.fileData.mimeType?.startsWith('image/') ? (
                     <div className="w-full">
@@ -145,6 +240,12 @@ export function MessageList({ messages, currentUserId }: MessageListProps) {
                   <span className={`text-xs ${isOwn ? 'text-blue-100' : 'text-gray-400'}`}>
                     {formatTimestamp(message.timestamp)}
                   </span>
+                  
+                  {message.isEdited && (
+                    <span className={`text-[10px] italic ${isOwn ? 'text-blue-200' : 'text-gray-400'}`}>
+                      (edited)
+                    </span>
+                  )}
                   
                   {isOwn && (
                     <span className="text-blue-100">

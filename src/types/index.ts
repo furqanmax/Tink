@@ -29,7 +29,16 @@ export interface Message {
   nonce?: string;
   timestamp: number;
   isRead: boolean;
+  isEdited?: boolean;
   type: 'text' | 'file' | 'system';
+  replyTo?: {
+    messageId: string;
+    senderId: string;
+    senderName: string;
+    content: string;
+    type: 'text' | 'file' | 'system';
+  };
+  forwardedFrom?: string;
   fileData?: {
     name: string;
     size: number;

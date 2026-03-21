@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { collection, query, where, orderBy, limit, onSnapshot, serverTimestamp, getDocs, Unsubscribe, doc, setDoc, getDoc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, onSnapshot, serverTimestamp, getDocs, Unsubscribe, doc, setDoc, getDoc, writeBatch, updateDoc } from 'firebase/firestore';
 import { firestore, auth } from '@/config/firebase';
 import { Message, User } from '@/types';
 import { indexedDBService } from '@/services/indexeddb';
@@ -83,24 +83,35 @@ async function decryptIfNeeded(
     nonce,
     timestamp: normalizeTimestamp(data.timestamp || data.createdAt),
     isRead: !!data.isRead,
+    isEdited: !!data.isEdited,
     type: data.type || 'text',
+    replyTo: data.replyTo,
   };
 }
 
 interface ChatState {
   conversations: Record<string, Message[]>;
   activeConversationId: string | null;
+  replyingTo: Message | null;
+  editingMessage: Message | null;
   loading: boolean;
   error: string | null;
   unsubscribers: Unsubscribe[];
   
   loadConversationHistory: (conversationId: string, currentUserId: string) => Promise<void>;
   subscribeToMessages: (conversationId: string, currentUserId: string) => Unsubscribe;
-  sendMessage: (conversationId: string, content: string) => Promise<void>;
+  sendMessage: (conversationId: string, content: string, replyTo?: Message) => Promise<void>;
+  editMessage: (conversationId: string, messageId: string, newContent: string) => Promise<void>;
+  forwardMessages: (conversationId: string, messages: Message[]) => Promise<void>;
+  setReplyingTo: (message: Message | null) => void;
+  setEditingMessage: (message: Message | null) => void;
   addLocalMessage: (message: Message) => void;
   updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void;
   setActiveConversation: (conversationId: string | null) => void;
   markAsRead: (conversationId: string) => Promise<void>;
+  deleteMessages: (conversationId: string, messageIds: string[]) => Promise<void>;
+  deleteChat: (conversationId: string) => Promise<void>;
+  getUserPublicKey: (userId: string, options?: { forceRefresh?: boolean }) => Promise<string>;
   cleanup: () => void;
 }
 
@@ -134,6 +145,8 @@ function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
 export const useChatStore = create<ChatState>((set, get) => ({
   conversations: {},
   activeConversationId: null,
+  replyingTo: null,
+  editingMessage: null,
   loading: false,
   error: null,
   unsubscribers: [],
@@ -227,7 +240,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return unsubscribe;
   },
 
-  sendMessage: async (conversationId: string, content: string) => {
+  sendMessage: async (conversationId: string, content: string, replyTo?: Message) => {
     const currentUser = auth.currentUser;
     if (!currentUser) throw new Error('Not authenticated');
 
@@ -243,8 +256,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const recipientPublicKey = await getUserPublicKey(recipientId, { forceRefresh: true });
       const encrypted = EncryptionService.encryptMessage(content, recipientPublicKey, secretKey);
 
-      // Create message document (idempotent)
-      await setDoc(doc(firestore, 'messages', messageId), {
+      const messageData: any = {
         messageId,
         conversationId,
         senderId: currentUser.uid,
@@ -256,7 +268,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
         isRead: false,
         type: 'text',
         createdAt: serverTimestamp(),
-      });
+      };
+
+      if (replyTo) {
+        messageData.replyTo = {
+          messageId: replyTo.messageId,
+          senderId: replyTo.senderId,
+          senderName: replyTo.senderName,
+          content: replyTo.content,
+          type: replyTo.type,
+        };
+      }
+
+      // Create message document (idempotent)
+      await setDoc(doc(firestore, 'messages', messageId), messageData);
 
       // Save to IndexedDB immediately for optimistic UI
       const optimisticMessage: Message & { recipientId: string } = {
@@ -271,6 +296,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         timestamp,
         isRead: false,
         type: 'text',
+        replyTo: replyTo ? {
+          messageId: replyTo.messageId,
+          senderId: replyTo.senderId,
+          senderName: replyTo.senderName,
+          content: replyTo.content,
+          type: replyTo.type,
+        } : undefined,
       };
 
       await indexedDBService.saveMessage(optimisticMessage);
@@ -294,6 +326,115 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  editMessage: async (conversationId: string, messageId: string, newContent: string) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('Not authenticated');
+
+    try {
+      const [uid1, uid2] = conversationId.split('_');
+      const recipientId = currentUser.uid === uid1 ? uid2 : uid1;
+
+      const { secretKey } = await EncryptionService.getOrCreateUserKeys(currentUser.uid);
+      const recipientPublicKey = await getUserPublicKey(recipientId, { forceRefresh: true });
+      const encrypted = EncryptionService.encryptMessage(newContent, recipientPublicKey, secretKey);
+
+      const updates = {
+        contentEncrypted: encrypted.ciphertext,
+        nonce: encrypted.nonce,
+        isEdited: true,
+        updatedAt: serverTimestamp(),
+      };
+
+      await updateDoc(doc(firestore, 'messages', messageId), updates);
+
+      // Update local state and IndexedDB
+      const existing = await indexedDBService.getMessage(messageId);
+      if (existing) {
+        const updatedMessage = {
+          ...existing,
+          content: newContent,
+          contentEncrypted: encrypted.ciphertext,
+          nonce: encrypted.nonce,
+          isEdited: true,
+        };
+        await indexedDBService.saveMessage(updatedMessage);
+        get().updateMessage(conversationId, messageId, {
+          content: newContent,
+          isEdited: true,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to edit message:', error);
+      throw error;
+    }
+  },
+
+  forwardMessages: async (conversationId: string, messages: Message[]) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('Not authenticated');
+
+    try {
+      const [uid1, uid2] = conversationId.split('_');
+      const recipientId = currentUser.uid === uid1 ? uid2 : uid1;
+      const { secretKey } = await EncryptionService.getOrCreateUserKeys(currentUser.uid);
+      const recipientPublicKey = await getUserPublicKey(recipientId, { forceRefresh: true });
+
+      for (const msg of messages) {
+        const messageId = uuidv4();
+        const timestamp = Date.now();
+        const content = msg.type === 'file' ? `[Forwarded File: ${msg.content}]` : msg.content;
+        const encrypted = EncryptionService.encryptMessage(content, recipientPublicKey, secretKey);
+
+        const messageData: any = {
+          messageId,
+          conversationId,
+          senderId: currentUser.uid,
+          senderName: currentUser.displayName || currentUser.email,
+          recipientId,
+          contentEncrypted: encrypted.ciphertext,
+          nonce: encrypted.nonce,
+          timestamp: serverTimestamp(),
+          isRead: false,
+          type: 'text',
+          createdAt: serverTimestamp(),
+          forwardedFrom: msg.senderName,
+        };
+
+        await setDoc(doc(firestore, 'messages', messageId), messageData);
+
+        const optimisticMessage: Message & { recipientId: string } = {
+          messageId,
+          conversationId,
+          senderId: currentUser.uid,
+          senderName: currentUser.displayName || currentUser.email || 'You',
+          recipientId,
+          content,
+          contentEncrypted: encrypted.ciphertext,
+          nonce: encrypted.nonce,
+          timestamp,
+          isRead: false,
+          type: 'text',
+          forwardedFrom: msg.senderName,
+        };
+
+        await indexedDBService.saveMessage(optimisticMessage);
+        
+        get().addLocalMessage(optimisticMessage);
+      }
+    } catch (error) {
+      console.error('Failed to forward messages:', error);
+      throw error;
+    }
+  },
+
+  setReplyingTo: (message) => {
+    set({ replyingTo: message });
+  },
+
+  setEditingMessage: (message) => {
+    set({ editingMessage: message });
+  },
+
   addLocalMessage: (message) => {
     set((state) => {
       const existing = state.conversations[message.conversationId] || [];
@@ -306,7 +447,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  updateMessage: (conversationId, messageId, updates) => {
+  updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => {
     set((state) => ({
       conversations: {
         ...state.conversations,
@@ -353,6 +494,67 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (error) {
       console.error('Failed to mark messages as read:', error);
     }
+  },
+
+  deleteMessages: async (conversationId: string, messageIds: string[]) => {
+    try {
+      const batch = writeBatch(firestore);
+      messageIds.forEach((id) => {
+        batch.delete(doc(firestore, 'messages', id));
+      });
+      await batch.commit();
+
+      set((state) => ({
+        conversations: {
+          ...state.conversations,
+          [conversationId]: (state.conversations[conversationId] || []).filter(
+            (msg) => !messageIds.includes(msg.messageId)
+          ),
+        },
+      }));
+
+      for (const id of messageIds) {
+        await indexedDBService.deleteMessage(id);
+      }
+    } catch (error) {
+      console.error('Failed to delete messages:', error);
+      throw error;
+    }
+  },
+
+  deleteChat: async (conversationId: string) => {
+    try {
+      const batch = writeBatch(firestore);
+      batch.delete(doc(firestore, 'conversations', conversationId));
+
+      const q = query(
+        collection(firestore, 'messages'),
+        where('conversationId', '==', conversationId)
+      );
+      const snapshot = await getDocs(q);
+      snapshot.docs.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+      await batch.commit();
+
+      set((state) => {
+        const nextConversations = { ...state.conversations };
+        delete nextConversations[conversationId];
+        return { conversations: nextConversations };
+      });
+
+      const localMessages = await indexedDBService.getMessages(conversationId, 10000);
+      for (const msg of localMessages) {
+        await indexedDBService.deleteMessage(msg.messageId);
+      }
+    } catch (error) {
+      console.error('Failed to delete chat:', error);
+      throw error;
+    }
+  },
+
+  getUserPublicKey: async (userId: string, options?: { forceRefresh?: boolean }) => {
+    return getUserPublicKey(userId, options);
   },
 
   cleanup: () => {

@@ -1,7 +1,7 @@
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = import.meta.env.CACHE_VERSION;
 const CACHE_NAME = `tink-${CACHE_VERSION}`;
 
 // Assets to cache immediately on install

@@ -53,20 +53,22 @@ async function decryptIfNeeded(
     }
   }
 
-  if (!content && contentEncrypted && nonce && senderId !== currentUserId) {
+  if (!content && contentEncrypted && nonce) {
     try {
       const { secretKey } = await EncryptionService.getOrCreateUserKeys(currentUserId);
       const otherUserId = senderId === currentUserId ? recipientId : senderId;
       let otherPublicKey = await getUserPublicKey(otherUserId);
+      
       try {
         content = EncryptionService.decryptMessage(contentEncrypted, nonce, otherPublicKey, secretKey);
       } catch (error) {
+        // Fallback: if decryption fails, try refreshing the public key
         otherPublicKey = await getUserPublicKey(otherUserId, { forceRefresh: true });
         content = EncryptionService.decryptMessage(contentEncrypted, nonce, otherPublicKey, secretKey);
       }
     } catch (error) {
       console.warn('Failed to decrypt message:', error);
-      content = '[Unable to decrypt]';
+      // Don't set content here, let it fall through to show [Encrypted message] in UI
     }
   }
 

@@ -14,6 +14,7 @@ import { fileShareService } from '@/services/fileShare';
 import { EncryptionService } from '@/services/encryption';
 import { indexedDBService } from '@/services/indexeddb';
 import { v4 as uuidv4 } from 'uuid';
+import { derivePresenceStatus } from '@/utils/presence';
 
 interface ChatWindowProps {
   contactId: string;
@@ -301,6 +302,11 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
     );
   }
 
+  const presence = derivePresenceStatus({
+    status: contact.status,
+    lastSeen: (contact as any).lastSeen,
+  });
+
   return (
     <div className="h-full min-h-0 flex flex-col bg-white dark:bg-gray-900 w-full">
       {/* File Picker Modal */}
@@ -337,9 +343,9 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
             </div>
             <span
               className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
-                contact.status === 'online'
+                presence === 'online'
                   ? 'bg-green-500'
-                  : contact.status === 'busy'
+                  : presence === 'busy'
                   ? 'bg-yellow-500'
                   : 'bg-gray-400'
               }`}
@@ -351,11 +357,7 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
               {contact.displayName || 'Unknown User'}
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-              {contact.status === 'online' 
-                ? 'Online' 
-                : contact.status === 'busy'
-                ? 'Busy'
-                : 'Offline'}
+              {presence === 'online' ? 'Online' : presence === 'busy' ? 'Busy' : 'Offline'}
             </p>
           </div>
         </div>

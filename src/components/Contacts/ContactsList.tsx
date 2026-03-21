@@ -4,6 +4,7 @@ import { firestore } from '@/config/firebase';
 import { useAuthStore } from '@/store/authStore';
 import { User, Conversation } from '@/types';
 import { formatDistanceToNow } from '@/utils/formatters';
+import { derivePresenceStatus } from '@/utils/presence';
 
 interface ContactsListProps {
   onSelectContact: (userId: string) => void;
@@ -130,6 +131,13 @@ export function ContactsList({ onSelectContact, selectedContact }: ContactsListP
   return (
     <div className="divide-y divide-gray-100 dark:divide-gray-800">
       {contacts.map((contact) => (
+        (() => {
+          const presence = derivePresenceStatus({
+            status: contact.status,
+            lastSeen: (contact as any).lastSeen,
+          });
+
+          return (
         <button
           key={contact.uid}
           onClick={() => onSelectContact(contact.uid)}
@@ -153,9 +161,9 @@ export function ContactsList({ onSelectContact, selectedContact }: ContactsListP
             </div>
             <span
               className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
-                contact.status === 'online'
+                presence === 'online'
                   ? 'bg-green-500'
-                  : contact.status === 'busy'
+                  : presence === 'busy'
                   ? 'bg-yellow-500'
                   : 'bg-gray-400'
               }`}
@@ -184,6 +192,8 @@ export function ContactsList({ onSelectContact, selectedContact }: ContactsListP
             </span>
           )}
         </button>
+          );
+        })()
       ))}
     </div>
   );

@@ -23,6 +23,7 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   isAuthenticated: boolean;
+  initialized: boolean;
   
   signup: (email: string, password: string, displayName: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
@@ -69,6 +70,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loading: false,
   error: null,
   isAuthenticated: false,
+  initialized: false,
 
   signup: async (email: string, password: string, displayName: string) => {
     set({ loading: true, error: null });
@@ -217,12 +219,14 @@ onAuthStateChanged(auth, async (user) => {
       user: user as AuthUser,
       userProfile: sanitizeUserProfile(userData, keys.publicKey),
       isAuthenticated: true,
+      initialized: true,
     });
   } else {
     useAuthStore.setState({
       user: null,
       userProfile: null,
       isAuthenticated: false,
+      initialized: true,
     });
   }
 });

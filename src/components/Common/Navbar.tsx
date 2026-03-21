@@ -3,6 +3,7 @@ import { User } from '@/types';
 import { User as FirebaseUser } from 'firebase/auth';
 import { Menu, X, LogOut, Settings, UserCircle, Sun, Moon } from 'lucide-react';
 import { useThemeStore } from '@/store/themeStore';
+import { derivePresenceStatus } from '@/utils/presence';
 
 interface NavbarProps {
   user: FirebaseUser | null;
@@ -14,6 +15,10 @@ interface NavbarProps {
 export function Navbar({ user, userProfile, onLogout, children }: NavbarProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { theme, toggleTheme } = useThemeStore();
+  const presence = derivePresenceStatus({
+    status: userProfile?.status,
+    lastSeen: (userProfile as any)?.lastSeen,
+  });
 
   return (
     <nav className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-3">
@@ -63,10 +68,10 @@ export function Navbar({ user, userProfile, onLogout, children }: NavbarProps) {
                 </p>
                 <div className="flex items-center gap-1">
                   <span className={`w-2 h-2 rounded-full ${
-                    userProfile?.status === 'online' ? 'bg-green-500' : 'bg-gray-400'
+                    presence === 'online' ? 'bg-green-500' : presence === 'busy' ? 'bg-yellow-500' : 'bg-gray-400'
                   }`} />
                   <span className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-                    {userProfile?.status || 'offline'}
+                    {presence}
                   </span>
                 </div>
               </div>

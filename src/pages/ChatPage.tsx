@@ -11,6 +11,7 @@ import { IncomingCallNotification } from '@/components/Call/IncomingCallNotifica
 import { CallWindow } from '@/components/Call/CallWindow';
 import { AdminDashboard } from '@/components/Admin/AdminDashboard';
 import { notificationService } from '@/services/notification';
+import { startPresence } from '@/services/presence';
 import { UserPlus, Shield } from 'lucide-react';
 
 export function ChatPage() {
@@ -35,6 +36,14 @@ export function ChatPage() {
       cleanup();
     };
   }, [user, loadFriendRequests, cleanup]);
+
+  useEffect(() => {
+    if (!user) return;
+    const stop = startPresence(user.uid);
+    return () => {
+      stop();
+    };
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;

@@ -11,12 +11,13 @@ import { MessageInput } from './MessageInput';
 import { FilePicker } from './FilePicker';
 import { ChatExportService } from '@/services/chatExport';
 import { ParticipantSelectionModal } from './ParticipantSelectionModal';
-import { Download, Upload, Video, Phone, MoreVertical, ArrowLeft, Paperclip, UserMinus, ShieldX, MessageSquare, Trash2, CheckSquare, X } from 'lucide-react';
+import { Download, Upload, Video, Phone, MoreVertical, ArrowLeft, Paperclip, UserMinus, ShieldX, MessageSquare, Trash2, CheckSquare, X, WifiOff } from 'lucide-react';
 import { fileShareService } from '@/services/fileShare';
 import { EncryptionService } from '@/services/encryption';
 import { indexedDBService } from '@/services/indexeddb';
 import { v4 as uuidv4 } from 'uuid';
 import { derivePresenceStatus } from '@/utils/presence';
+import { TimeoutError, OfflineError } from '@/components/Common/ErrorPages';
 
 interface ChatWindowProps {
   contactId: string;
@@ -41,7 +42,10 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
     setReplyingTo,
     editingMessage,
     setEditingMessage,
-    editMessage
+    editMessage,
+    isOffline,
+    setOffline,
+    error: chatError
   } = useChatStore();
   const { initiateCall } = useCallStore();
   const { unfriendUser, blockUser } = useFriendRequestStore();
@@ -54,9 +58,26 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [importData, setImportData] = useState<{ content: string; participants: string[] } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
 
   const conversationId = user ? [user.uid, contactId].sort().join('_') : '';
   const messages = conversations[conversationId] || [];
+
+  // Close menus on outside tap
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(event.target as Node)) {
+        setShowActionsMenu(false);
+      }
+    };
+
+    if (showActionsMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showActionsMenu]);
 
   // Load contact info
   useEffect(() => {
@@ -75,6 +96,20 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
 
     loadContact();
   }, [contactId]);
+
+  // Network Status Listeners
+  useEffect(() => {
+    const handleOnline = () => setOffline(false);
+    const handleOffline = () => setOffline(true);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [setOffline]);
 
   // Load messages and subscribe
   useEffect(() => {
@@ -506,6 +541,14 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
     );
   }
 
+  if (isOffline) {
+    return <OfflineError />;
+  }
+
+  if (chatError?.includes('timeout')) {
+    return <TimeoutError />;
+  }
+
   if (!contact) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -610,9 +653,17 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
                 <h2 className="font-semibold text-gray-900 dark:text-gray-100 truncate">
                   {contact.displayName || 'Unknown User'}
                 </h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                  {presence === 'online' ? 'Online' : presence === 'busy' ? 'Busy' : 'Offline'}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                    {presence === 'online' ? 'Online' : presence === 'busy' ? 'Busy' : 'Offline'}
+                  </p>
+                  {isOffline && (
+                    <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-[10px] font-bold text-gray-500 rounded uppercase tracking-wider">
+                      <WifiOff className="w-3 h-3" />
+                      Offline Mode
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -645,7 +696,10 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
             <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </button>
           {showActionsMenu && (
-            <div className="absolute right-0 top-12 w-48 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg py-1 z-30">
+            <div 
+              ref={actionsMenuRef}
+              className="absolute right-0 top-12 w-48 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg py-1 z-30"
+            >
               <button
                 onClick={() => {
                   setSelectionMode(true);
@@ -663,13 +717,7 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
                 <Download className="w-4 h-4" />
                 Export Chat
               </button>
-              <button
-                onClick={handleDeleteChat}
-                className="w-full px-3 py-2 text-sm text-left text-red-600 hover:bg-red-50 dark:hover:bg-red-950 flex items-center gap-2"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete Chat
-              </button>
+              
               <label className="w-full px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 cursor-pointer">
                 <Upload className="w-4 h-4" />
                 Import Chat
@@ -680,7 +728,7 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
                   onChange={handleImportChat}
                 />
               </label>
-              <label className="w-full px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 cursor-pointer">
+              <label className=" hidden w-full px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 cursor-pointer">
                 <MessageSquare className="w-4 h-4" />
                 Import WhatsApp (.txt)
                 <input
@@ -706,6 +754,13 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
                 <ShieldX className="w-4 h-4" />
                 Block
               </button>
+              <button
+                onClick={handleDeleteChat}
+                className="w-full px-3 py-2 text-sm text-left text-red-600 hover:bg-red-50 dark:hover:bg-red-950 flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete Chat
+              </button>
             </div>
           )}
         </div>
@@ -720,7 +775,7 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
   )}
 
   {/* Messages */}
-  <div className="flex-1 min-h-0 overflow-y-auto bg-gray-50 dark:bg-gray-950 overscroll-contain">
+  <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-gray-50 dark:bg-gray-950 overscroll-contain">
     <MessageList 
       messages={messages} 
       currentUserId={user?.uid || ''} 
@@ -729,6 +784,7 @@ export function ChatWindow({ contactId, onClose, onStartCall }: ChatWindowProps)
       onToggleSelection={handleToggleSelection}
       onReply={(msg) => setReplyingTo(msg)}
       onEdit={(msg) => setEditingMessage(msg)}
+      onDelete={(id) => deleteMessages(conversationId, [id])}
     />
     <div ref={messagesEndRef} />
   </div>

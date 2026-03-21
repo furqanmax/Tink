@@ -1,6 +1,7 @@
+import { useState, useRef, useEffect } from 'react';
 import { Message } from '@/types';
 import { formatTimestamp } from '@/utils/formatters';
-import { FileText, Video as VideoIcon, Music, Reply, Pencil } from 'lucide-react';
+import { FileText, Video as VideoIcon, Music, Reply, Pencil, Trash2 } from 'lucide-react';
 
 interface MessageListProps {
   messages: Message[];
@@ -10,6 +11,7 @@ interface MessageListProps {
   onToggleSelection?: (id: string) => void;
   onReply?: (message: Message) => void;
   onEdit?: (message: Message) => void;
+  onDelete?: (messageId: string) => void;
 }
 
 export function MessageList({ 
@@ -19,8 +21,69 @@ export function MessageList({
   selectedIds = new Set(),
   onToggleSelection,
   onReply,
-  onEdit
+  onEdit,
+  onDelete
 }: MessageListProps) {
+  const [swipeId, setSwipeId] = useState<string | null>(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [longPressId, setLongPressId] = useState<string | null>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent, messageId: string) => {
+    if (selectionMode) return;
+    touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    
+    longPressTimer.current = setTimeout(() => {
+      setLongPressId(messageId);
+    }, 500);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent, messageId: string) => {
+    if (!touchStart.current || selectionMode) return;
+    
+    const deltaX = e.touches[0].clientX - touchStart.current.x;
+    const deltaY = Math.abs(e.touches[0].clientY - touchStart.current.y);
+
+    if (deltaY > 30) {
+      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+      return;
+    }
+
+    if (Math.abs(deltaX) > 10) {
+      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+      setSwipeId(messageId);
+      // Limit swipe to 60px
+      const offset = Math.max(Math.min(deltaX, 60), -60);
+      setSwipeOffset(offset);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    
+    if (Math.abs(swipeOffset) > 40) {
+      const message = messages.find(m => m.messageId === swipeId);
+      if (message) {
+        if (swipeOffset > 0) {
+          onReply?.(message);
+        } else if (message.senderId === currentUserId && message.type === 'text') {
+          onEdit?.(message);
+        }
+      }
+    }
+    
+    setSwipeId(null);
+    setSwipeOffset(0);
+    touchStart.current = null;
+  };
+
+  useEffect(() => {
+    const handleClickOutside = () => setLongPressId(null);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
   if (messages.length === 0) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -48,23 +111,43 @@ export function MessageList({
   }
 
   return (
-    <div className="px-3 sm:px-4 py-4 space-y-4">
+    <div className="px-3 sm:px-4 py-4 space-y-4 overflow-x-hidden">
       {messages.map((message, index) => {
         const isOwn = message.senderId === currentUserId;
         const showAvatar = !isOwn && (
           index === 0 || messages[index - 1].senderId !== message.senderId
         );
+        const isSwiping = swipeId === message.messageId;
+        const isLongPressed = longPressId === message.messageId;
 
         return (
           <div
             key={message.messageId}
             id={`message-${message.messageId}`}
-            className={`flex w-full transition-colors duration-500 ${isOwn ? 'justify-end' : 'justify-start'} ${
+            className={`flex w-full transition-colors duration-500 relative ${isOwn ? 'justify-end' : 'justify-start'} ${
               selectionMode ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800/50' : ''
             }`}
             onClick={() => selectionMode && onToggleSelection?.(message.messageId)}
+            onTouchStart={(e) => handleTouchStart(e, message.messageId)}
+            onTouchMove={(e) => handleTouchMove(e, message.messageId)}
+            onTouchEnd={handleTouchEnd}
           >
-            <div className={`flex max-w-[85%] sm:max-w-[70%] ${isOwn ? 'flex-row-reverse' : 'flex-row'} gap-2 items-center`}>
+            {/* Gesture Indicators */}
+            {isSwiping && swipeOffset > 20 && (
+              <div className="absolute left-0 top-1/2 -translate-y-1/2 p-2 text-blue-500 animate-pulse">
+                <Reply className="w-5 h-5" />
+              </div>
+            )}
+            {isSwiping && swipeOffset < -20 && isOwn && message.type === 'text' && (
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 p-2 text-green-500 animate-pulse">
+                <Pencil className="w-5 h-5" />
+              </div>
+            )}
+
+            <div 
+              className={`flex max-w-[85%] sm:max-w-[70%] ${isOwn ? 'flex-row-reverse' : 'flex-row'} gap-2 items-center transition-transform duration-150`}
+              style={{ transform: isSwiping ? `translateX(${swipeOffset}px)` : 'none' }}
+            >
               {selectionMode && (
                 <div className="flex-shrink-0 px-2">
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
@@ -95,13 +178,13 @@ export function MessageList({
               <div
                 className={`group relative px-4 py-2.5 rounded-2xl ${
                   isOwn
-                    ? 'bg-blue-900 text-white rounded-br-md'
+                    ? 'bg-blue-600 dark:bg-blue-900 text-white rounded-br-md'
                     : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-md shadow-sm'
                 }`}
               >
-                {/* Reply Button (visible on hover) */}
+                {/* Desktop Reply/Edit Buttons (hidden on mobile) */}
                 {!selectionMode && (
-                  <div className={`absolute top-0 ${isOwn ? '-left-20' : '-right-20'} flex opacity-0 group-hover:opacity-100 transition-opacity`}>
+                  <div className={`hidden lg:flex absolute top-0 ${isOwn ? '-left-20' : '-right-20'} opacity-0 group-hover:opacity-100 transition-opacity`}>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -127,12 +210,57 @@ export function MessageList({
                   </div>
                 )}
 
+                {/* Mobile Long Press Menu */}
+                {isLongPressed && !selectionMode && (
+                  <div className="absolute z-50 bottom-full mb-2 left-1/2 -translate-x-1/2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-xl flex overflow-hidden animate-in fade-in zoom-in duration-200">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onReply?.(message);
+                        setLongPressId(null);
+                      }}
+                      className="p-3 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 border-r border-gray-100 dark:border-gray-800 flex flex-col items-center gap-1"
+                    >
+                      <Reply className="w-4 h-4" />
+                      <span className="text-[10px]">Reply</span>
+                    </button>
+                    {isOwn && message.type === 'text' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit?.(message);
+                          setLongPressId(null);
+                        }}
+                        className="p-3 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 border-r border-gray-100 dark:border-gray-800 flex flex-col items-center gap-1"
+                      >
+                        <Pencil className="w-4 h-4" />
+                        <span className="text-[10px]">Edit</span>
+                      </button>
+                    )}
+                    {isOwn && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm('Delete this message?')) {
+                            onDelete?.(message.messageId);
+                          }
+                          setLongPressId(null);
+                        }}
+                        className="p-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 flex flex-col items-center gap-1"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span className="text-[10px]">Delete</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {/* Reply Context */}
                 {message.replyTo && (
                   <div 
                     className={`mb-2 p-2 rounded-lg text-xs border-l-4 ${
                       isOwn 
-                        ? 'bg-blue-700/50 border-blue-300 text-blue-100' 
+                        ? 'bg-blue-700/50 dark:bg-blue-800/50 border-blue-300 text-blue-100' 
                         : 'bg-gray-100 dark:bg-gray-700 border-blue-500 text-gray-600 dark:text-gray-300'
                     } cursor-pointer hover:opacity-80`}
                     onClick={(e) => {

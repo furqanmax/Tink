@@ -96,6 +96,7 @@ interface ChatState {
   editingMessage: Message | null;
   loading: boolean;
   error: string | null;
+  isOffline: boolean;
   unsubscribers: Unsubscribe[];
   
   loadConversationHistory: (conversationId: string, currentUserId: string) => Promise<void>;
@@ -112,6 +113,7 @@ interface ChatState {
   deleteMessages: (conversationId: string, messageIds: string[]) => Promise<void>;
   deleteChat: (conversationId: string) => Promise<void>;
   getUserPublicKey: (userId: string, options?: { forceRefresh?: boolean }) => Promise<string>;
+  setOffline: (isOffline: boolean) => void;
   cleanup: () => void;
 }
 
@@ -149,6 +151,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   editingMessage: null,
   loading: false,
   error: null,
+  isOffline: !navigator.onLine,
   unsubscribers: [],
 
   loadConversationHistory: async (conversationId: string, currentUserId: string) => {
@@ -555,6 +558,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   getUserPublicKey: async (userId: string, options?: { forceRefresh?: boolean }) => {
     return getUserPublicKey(userId, options);
+  },
+
+  setOffline: (isOffline: boolean) => {
+    set({ isOffline });
   },
 
   cleanup: () => {

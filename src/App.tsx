@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { ProtectedRoute } from '@/components/Auth/ProtectedRoute';
@@ -11,7 +11,34 @@ const Signup = lazy(() => import('@/pages/Signup').then((m) => ({ default: m.Sig
 const ChatPage = lazy(() => import('@/pages/ChatPage').then((m) => ({ default: m.ChatPage })));
 
 export function App() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user, updateStatus } = useAuthStore();
+
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        updateStatus('online');
+      } else {
+        updateStatus('busy');
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      updateStatus('offline');
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Initial status set
+    updateStatus('online');
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isAuthenticated, user, updateStatus]);
 
   return (
     <ErrorBoundary>

@@ -33,6 +33,7 @@ interface AuthState {
   setError: (error: string | null) => void;
   clearError: () => void;
   updateProfile: (data: Partial<User>) => Promise<void>;
+  updateStatus: (status: 'online' | 'offline' | 'busy') => Promise<void>;
 }
 
 async function ensureUserKeys(userId: string, userData?: User): Promise<{ publicKey: string; secretKey: string; updatedRemote: boolean }> {
@@ -198,6 +199,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error;
     }
   },
+
+  updateStatus: async (status) => {
+    const { user } = get();
+    if (!user) return;
+
+    try {
+      await updateDoc(doc(firestore, 'users', user.uid), {
+        status,
+        lastSeen: serverTimestamp(),
+      });
+      set((state) => ({
+        userProfile: state.userProfile ? { ...state.userProfile, status } : null
+      }));
+    } catch (error) {
+      console.error('Failed to update status:', error);
+    }
+  },
 }));
 
 // Initialize auth state listener
@@ -212,6 +230,13 @@ onAuthStateChanged(auth, async (user) => {
       await updateDoc(doc(firestore, 'users', user.uid), {
         publicKey: keys.publicKey,
         secretKey: keys.secretKey,
+        status: 'online',
+        lastSeen: serverTimestamp(),
+      });
+    } else {
+      await updateDoc(doc(firestore, 'users', user.uid), {
+        status: 'online',
+        lastSeen: serverTimestamp(),
       });
     }
     

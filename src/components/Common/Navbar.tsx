@@ -41,7 +41,7 @@ export function Navbar({ user, userProfile, onLogout, children }: NavbarProps) {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Tink</h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Secure PWA Messaging</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Inspired by Nova</p>
           </div>
         </div>
 

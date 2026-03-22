@@ -34,6 +34,7 @@ interface AuthState {
   clearError: () => void;
   updateProfile: (data: Partial<User>) => Promise<void>;
   updateStatus: (status: 'online' | 'offline' | 'busy') => Promise<void>;
+  updateFCMToken: (token: string) => Promise<void>;
 }
 
 async function ensureUserKeys(userId: string, userData?: User): Promise<{ publicKey: string; secretKey: string; updatedRemote: boolean }> {
@@ -197,6 +198,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (error) {
       console.error('Failed to update profile:', error);
       throw error;
+    }
+  },
+
+  updateFCMToken: async (token: string) => {
+    const { user } = get();
+    if (!user) return;
+    try {
+      await updateDoc(doc(firestore, 'users', user.uid), {
+        fcmToken: token,
+      });
+    } catch (error) {
+      console.error('Failed to update FCM token:', error);
     }
   },
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { LoadingSpinner } from '@/components/Common/LoadingSpinner';
 import { Mail, Lock, LogIn } from 'lucide-react';
@@ -8,7 +8,6 @@ export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { login, loading, error, clearError, isAuthenticated, initialized } = useAuthStore();
-  const navigate = useNavigate();
 
   if (!initialized) {
     return (
@@ -22,7 +21,7 @@ export function Login() {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/chat" replace />;
+    return <Navigate to="/" replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,7 +30,6 @@ export function Login() {
     
     try {
       await login(email, password);
-      navigate('/chat');
     } catch (err) {
       console.error('Login failed:', err);
     }

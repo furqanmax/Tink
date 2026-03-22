@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { LoadingSpinner } from '@/components/Common/LoadingSpinner';
 import { Mail, Lock, User, UserPlus } from 'lucide-react';
@@ -11,8 +11,11 @@ export function Signup() {
   const [displayName, setDisplayName] = useState('');
   const [passwordError, setPasswordError] = useState('');
   
-  const { signup, loading, error, clearError } = useAuthStore();
-  const navigate = useNavigate();
+  const { signup, loading, error, clearError, isAuthenticated } = useAuthStore();
+
+  if (isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +34,6 @@ export function Signup() {
 
     try {
       await signup(email, password, displayName);
-      navigate('/chat');
     } catch (err) {
       console.error('Signup failed:', err);
     }
@@ -149,7 +151,7 @@ export function Signup() {
             <p className="text-gray-600 dark:text-gray-300">
               Already have an account?{' '}
               <Link
-                to="/login"
+                to="/"
                 className="text-blue-600 hover:text-blue-700 font-medium transition-colors"
               >
                 Sign in

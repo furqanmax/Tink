@@ -31,11 +31,20 @@ export function MessageInput({
     if (editingMessage) {
       setMessage(editingMessage.content);
       setIsTyping(true);
-    } else {
+    } else if (!replyingTo) {
       setMessage('');
       setIsTyping(false);
     }
   }, [replyingTo, editingMessage]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      const newHeight = Math.min(textarea.scrollHeight, 160); // Max height of 160px
+      textarea.style.height = `${newHeight}px`;
+    }
+  }, [message]);
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -50,8 +59,9 @@ export function MessageInput({
       setMessage('');
       setIsTyping(false);
       
-      // Keep focus on textarea to prevent keyboard from closing on mobile
+      // Reset height
       if (textareaRef.current) {
+        textareaRef.current.style.height = '40px';
         textareaRef.current.focus();
       }
     }
@@ -133,8 +143,12 @@ export function MessageInput({
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
             rows={1}
-            className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none max-h-32 text-[16px] sm:text-base overflow-x-hidden"
-            style={{ minHeight: '40px' }}
+            className="w-full px-3 sm:px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-[16px] sm:text-base overflow-y-auto"
+            style={{ 
+              minHeight: '40px',
+              maxHeight: '160px',
+              lineHeight: '1.5'
+            }}
           />
         </div>
 
